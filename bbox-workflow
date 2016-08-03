@@ -1,0 +1,89 @@
+#!/usr/bin/perl -w
+
+use strict;
+use warnings;
+
+use Cwd;
+use Fcntl qw(:flock);
+
+
+# First, let's make a big list of global variables.  These all initially start
+# out as undefined, and are filled in as we go along.
+
+# $SEARCHFOLDER is the path to the directory that we look in when we are doing a
+# "scan" operation.  In other words, $SEARCHDIR is where all the run folders
+# live.
+my $SEARCHFOLDER = undef;
+
+# $RUNFOLDER is the path to the run folder.  Initially it contains the output
+# from the instrument (the instrument copies it directly), and later on it
+# will contain output from the analysis program, plus our logs.
+my $RUNFOLDER = undef;
+
+# $LOCKPATH is the path to the "workflow-lock.txt" file.  This file should
+# only exist while a copy of bbox-workflow is running.
+my $LOCKPATH = undef;
+
+# $LOGPATH is the path to the "workflow-log.txt" file.
+my $LOGPATH = undef;
+
+# $ACTION is what we are going to do.  It can be "scan", "run", or "deliver".
+my $ACTION = undef;
+
+
+# Now, let's do stuff!
+# First, we're going to find out what our action is
+
+
+# We should have at least one argument from the command line
+if (scalar(@ARGV) < 1) {
+	print "Please specify an action to perform, like 'scan' or 'run'.\n",
+	      'For example, `', $FindBin::RealScript, ' scan NextSeq` or `',
+	      $FindBin::RealScript, ' run NextSeq/160804-NS500126_BLAH_BLAH`',
+	      ".\n Or you can just say `", $FindBin::RealScript, " help`!\n";
+	exit 1;
+}
+
+
+# First, we need to see what action we're going to perform.
+# Let's also set up code to run for each action.
+my $ACTION = shift @ARGV;
+my %possible_actions;
+
+
+$possible_actions{help} = sub {
+	print "Help goes here!\n";
+};
+
+$possible_actions{scan} = sub {
+	print "Not ready yet!\n";
+};
+
+$possible_actions{run} = sub {
+	# Get the run folder from the command line
+	if (scalar(@ARGV) < 1) {
+		print 'When using the `run` action, please provide the path ',
+		      'to the run folder.  For example, `',
+		      $FindBin::RealScript, " run 160804-NS500126-0555-ABC`.\n";
+		exit 1;
+	}
+	my $candidate_runfolder = shift $ARGV;
+
+	# Make sure the run folder is valid, and also set $SEARCHFOLDER
+	$RUNFOLDER = validate_path($candidate_runfolder);
+	if (!defined($RUNFOLDER)) {
+		print "The run folder you provided, '$candidate_runfolder', ",
+		      'does not exist or cannot be read.  Please re-run your ',
+		      'command with a valid folder path, or contact ',
+		      "research-computing-support@stanford.edu.\n";
+		exit 1;
+	}
+	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
+};
+
+
+# Make sure a path is valid
+sub validate_path {
+	my ($path) = @_;
+
+	if 
