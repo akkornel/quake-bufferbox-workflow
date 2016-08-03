@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Cwd;
+use FindBin qw($RealScript);
 use Fcntl qw(:flock);
 
 
@@ -48,9 +49,9 @@ my $ACTION = undef;
 if (scalar(@ARGV) < 1) {
 	log_msg(<<"EOL");
 Please specify an action to perform, like 'scan' or 'run'.
-For example: $FindBin::RealScript scan NextSeq
-Or: $FindBin::RealScript run NextSeq/160804-NS500126-123-BDGEJMGM
-Or you can just say `$FindBin::RealScript help` !
+For example: $RealScript scan NextSeq
+Or: $RealScript run NextSeq/160804-NS500126-123-BDGEJMGM
+Or you can just say `$RealScript help` !
 EOL
 	exit 1;
 }
@@ -75,7 +76,7 @@ $possible_actions{run} = sub {
 	if (scalar(@ARGV) < 1) {
 		log_msg(<<"EOL");
 When using the `run` action, please provide the path to the run folder.
-For example: $FindBin::RealScript run 160804-NS500126-0555-ABCDEFG
+For example: $RealScript run 160804-NS500126-0555-ABCDEFG
 EOL
 		exit 1;
 	}
