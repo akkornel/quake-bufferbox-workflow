@@ -27,8 +27,17 @@ my $LOCKPATH = undef;
 # $LOGPATH is the path to the "workflow-log.txt" file.
 my $LOGPATH = undef;
 
+# $LOGHANDLE is a File Handle pointing to $LOGPATH
+my $LOGHANDLE = undef;
+
+# $LOG contains messages that we haven't written to a log file yet.
+# This is only useful when $LOGPATH is undefined.
+my $LOG = "";
+
 # $ACTION is what we are going to do.  It can be "scan", "run", or "deliver".
 my $ACTION = undef;
+
+
 
 
 # Now, let's do stuff!
@@ -37,17 +46,19 @@ my $ACTION = undef;
 
 # We should have at least one argument from the command line
 if (scalar(@ARGV) < 1) {
-	print "Please specify an action to perform, like 'scan' or 'run'.\n",
-	      'For example, `', $FindBin::RealScript, ' scan NextSeq` or `',
-	      $FindBin::RealScript, ' run NextSeq/160804-NS500126_BLAH_BLAH`',
-	      ".\n Or you can just say `", $FindBin::RealScript, " help`!\n";
+	log_msg(<<"EOL");
+Please specify an action to perform, like 'scan' or 'run'.
+For example: $FindBin::RealScript scan NextSeq
+Or: $FindBin::RealScript run NextSeq/160804-NS500126-123-BDGEJMGM
+Or you can just say `$FindBin::RealScript help` !
+EOL
 	exit 1;
 }
 
 
 # First, we need to see what action we're going to perform.
 # Let's also set up code to run for each action.
-my $ACTION = shift @ARGV;
+$ACTION = shift @ARGV;
 my %possible_actions;
 
 
@@ -62,28 +73,58 @@ $possible_actions{scan} = sub {
 $possible_actions{run} = sub {
 	# Get the run folder from the command line
 	if (scalar(@ARGV) < 1) {
-		print 'When using the `run` action, please provide the path ',
-		      'to the run folder.  For example, `',
-		      $FindBin::RealScript, " run 160804-NS500126-0555-ABC`.\n";
+		log_msg(<<"EOL");
+When using the `run` action, please provide the path to the run folder.
+For example: $FindBin::RealScript run 160804-NS500126-0555-ABCDEFG
+EOL
 		exit 1;
 	}
-	my $candidate_runfolder = shift $ARGV;
+	my $candidate_runfolder = shift @ARGV;
 
 	# Make sure the run folder is valid, and also set $SEARCHFOLDER
 	$RUNFOLDER = validate_path($candidate_runfolder);
 	if (!defined($RUNFOLDER)) {
-		print "The run folder you provided, '$candidate_runfolder', ",
-		      'does not exist or cannot be read.  Please re-run your ',
-		      'command with a valid folder path, or contact ',
-		      "research-computing-support@stanford.edu.\n";
+		log_msg(<<"EOL");
+The run folder you provided does not exist, is not a directory, or cannot be
+read.  Please re-run your command with a valid folder path.
+The path you provided is: $candidate_runfolder
+EOL
 		exit 1;
 	}
 	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
 };
 
 
+#
+# Support Subroutines Go Here
+# 
+
+
+# Log stuff
+sub log_msg {
+	my ($message) = @_;
+
+	# First, print the log entry to standard output
+	print $message, "\n";
+
+	# Next, if the log file is open, output it there
+	if (defined($LOGHANDLE)) {
+		print $LOGHANDLE $message, "\n";
+	}
+}
+
+
 # Make sure a path is valid
 sub validate_path {
 	my ($path) = @_;
 
-	if 
+	if (   (-r $path)
+	    && (-x $path)
+	    && (-d $path)
+	) {
+		$path = Cwd::abs_path($path);
+		return $path;
+	} else {
+		return undef;
+	}
+}
