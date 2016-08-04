@@ -316,6 +316,7 @@ EOL
 # Release our lock
 sub lock_release {
 	# We already have everything set globally
+	return unless defined($LOCKHANDLE);
 	unlink($LOCKPATH);
 	flock($LOCKHANDLE, LOCK_UN);
 	close($LOCKHANDLE);
