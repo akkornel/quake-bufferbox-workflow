@@ -400,7 +400,7 @@ EOF
 #
 # NOTE: This file is read right before bbox-workflow tries to send an email.
 
-nobody@stanford.edu
+nobody\@stanford.edu
 EOF
 
 		close($email_handle);
