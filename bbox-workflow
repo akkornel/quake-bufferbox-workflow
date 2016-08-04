@@ -6,7 +6,7 @@ use warnings;
 use Cwd;
 use FindBin qw($RealScript);
 use Fcntl qw(:flock);
-use IPC::Open2;
+use IPC::Open3;
 use Symbol qw(gensym);
 
 
