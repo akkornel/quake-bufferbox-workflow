@@ -145,7 +145,7 @@ EOL
 
 	# Get ready to run the analysis command
 	log_msg("Running the analysis!\n");
-	log_msg("Analysis command: " . join(' ', @RUNCOMMAND));
+	log_msg("Analysis command: " . join(' ', @RUNCOMMAND) . "\n");
 	log_msg("Analysys command output:\n");
 	log_msg("==========================================================\n");
 
@@ -153,9 +153,16 @@ EOL
 	# We send all output to the log directly.  We also make a file handle
 	# for input, but then we immediately close it (we don't need it).
 	my $input_handle = gensym();
+	my $output_handle = gensym();
+	my $analysis_buffer = '';
 	chdir($RUNFOLDER);
-	my $analysis_pid = open3($LOGHANDLE, $input_handle, $LOGHANDLE, @RUNCOMMAND);
+	my $analysis_pid = open3($output_handle, $input_handle,
+	                         $output_handle, @RUNCOMMAND);
 	close($input_handle);
+	while (read($output_handle, $analysis_buffer, 100)) {
+		log_msg($analysis_buffer);
+		$analysis_buffer = '';
+	}
 	waitpid($analysis_pid, 0);
 
 	# Clean up from the analysis command
