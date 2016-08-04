@@ -538,12 +538,14 @@ EOF
 		],
 		parts      => [ $email_body, $email_file ],
 	);
+	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
+	log_msg(join(',', @{email_recipients($config)}) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
-		mailer => 'sendmaill',
+		mailer => 'sendmail',
 	});
-	$email_sender->send($email);
+	$email_sender->send($email->as_string);
 
 	# Finally, done!
 	return 1;
