@@ -95,6 +95,25 @@ EOL
 	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
 };
 
+# Now that we have our actions, let's execute the code
+if (exists($possible_actions{$ACTION})) {
+	# We are getting a subroutine reference from a Perl hash, dereferencing
+	# it, and calling it.
+	&{$possible_actions{$ACTION}};
+}
+else {
+	log_msg(<<"EOL");
+The action you specified, $ACTION, is not a known action.
+You have three possible actions:
+* scan: Scan a given directory for unprocessed work folders.
+* run: Process (or re-process) a given work folder.
+* deliver: Deliver the analysis results from a given work folder.
+EOL
+}
+
+# That's it!  Let's exit
+exit 0;
+
 
 #
 # Support Subroutines Go Here
