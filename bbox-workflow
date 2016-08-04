@@ -143,6 +143,39 @@ EOL
 		return;
 	}
 
+	# Check to see if we have any Project directories
+	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
+	my $basecalls_handle;
+	opendir($basecalls_handle, $basecalls_path) or do {
+		log_msg(<<"EOF");
+The BaseCalls directory does not exist, is not a directory, or cannot be read.
+Please make sure you are running this command with a valid run folder!
+The directory we are trying to open is: $basecalls_path
+The error we are getting is: $!
+EOF
+		return;
+	};
+	while (readdir($basecalls_handle)) {
+		# Find any directories whose name starts with "Project_"
+		next unless $_ =~ m{\A        # Start of string
+		                    (         # Start capturing match
+		                    Project_  # "Project_"
+		                    [a-z0-9]+ # One or more letters/numbers
+		                    )         # End capture
+		                    \z        # End of string
+		                   }xims;
+
+		# Rename the directory (this might recurse)
+		log_msg(<<"EOF");
+We found an existing Project directory: $1.
+We are renaming this to $1.old.
+(If that directory already exists, we'll add another ".old" to that one,
+and so on, and so on, and ....
+EOF
+		my $old_project_path = "$basecalls_path/$1";
+		directory_rename($old_project_path);
+	}
+
 	# Get ready to run the analysis command
 	log_msg("Running the analysis!\n");
 	log_msg("Analysis command: " . join(' ', @RUNCOMMAND) . "\n");
@@ -164,6 +197,7 @@ EOL
 		$analysis_buffer = '';
 	}
 	waitpid($analysis_pid, 0);
+	close($output_handle);
 
 	# Clean up from the analysis command
 	my $analysis_exit_code = $? >> 8;
@@ -343,4 +377,14 @@ sub validate_path {
 	} else {
 		return undef;
 	}
+}
+
+# Append .old to a directory
+sub directory_rename {
+	my ($path) = @_;
+	my $new_name = "$path.old";
+	if (-r $new_name) {
+		directory_rename($new_name);
+	}
+	rename($path, $new_name);
 }
