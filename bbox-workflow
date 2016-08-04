@@ -261,7 +261,10 @@ sub log_open {
 		log_rename($LOGPATH);
 	}
 
-	# Try opening our log file
+	# Try opening our log file, and set autoflush
+	# autoflush, in particular, is important: If we don't do that, and we
+	# have to send the log file somewhere, it might not all be written to
+	# disk.
 	open($LOGHANDLE, '>', $LOGPATH) or do {
 		log_msg(<<"EOL");
 We are having trouble opening the log file.
@@ -270,6 +273,9 @@ The error we got is: $!
 EOL
 		return 0;
 	};
+	my $old_handle = select($LOGHANDLE);
+	$| = 1;
+	select($old_handle);
 
 	# Put a header into the log file.
 	# Also, if we have anything in our holding variable, output it.
