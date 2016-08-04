@@ -6,9 +6,24 @@ use warnings;
 use Cwd;
 use FindBin qw($RealScript);
 use Fcntl qw(:flock);
+use IPC::Open2;
 
 
-# First, let's make a big list of global variables.  These all initially start
+# First, let's set our "constants".  These are settings that aren't likely to
+# change much (that's why they're in code, not in a config file).
+
+# $TIMEOUT1 is how long we should wait, in minutes, for an "RTAComplete.txt"
+# file to appear.
+# We set this to 5 days.
+# 5 (days) * 24 (hours) * 60 (minutes)
+my $TIMEOUT1 = 7200;
+
+# $RUNCOMMAND is the command we will run.
+my @RUNCOMMAND = (qw(
+bcl2fastq -l WARNING -o Data/Intensities/BaseCalls -p 9 -d 2 --no-lane-splitting
+));
+
+# Next, let's make a big list of global variables.  These all initially start
 # out as undefined, and are filled in as we go along.
 
 # $SEARCHFOLDER is the path to the directory that we look in when we are doing a
@@ -106,6 +121,52 @@ EOL
 
 	# Start logging to file
 	log_open() or exit(1);
+
+	# Wait for RTAComplete.txt to appear
+	log_msg("Waiting for $RUNFOLDER/RTAComplete.txt to appear...\n");
+	while ($TIMEOUT1 > 0) {
+		# If the file exists, then stop the loop
+		if (-r "$RUNFOLDER/RTAComplete.txt") {
+			log_msg("File found!\n");
+			last;
+		}
+
+		# If the file doesn't exist yet, wait a minute and try again
+		$TIMEOUT1--;
+		sleep(60);
+	}
+	# If we timed out, then exit.
+	# TODO: Send Email
+	if ($TIMEOUT1 == 0) {
+		log_msg("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
+		return;
+	}
+
+	# Get ready to run the analysis command
+	log_msg("Running the analysis!\n");
+	log_msg("Analysis command: " . join(' ', @RUNCOMMAND));
+	log_msg("Analysys command output:\n");
+	log_msg("==========================================================\n");
+
+	# Actually run the analysis command.
+	# We send all output to the log directly.  We also make a file handle
+	# for input, but then we immediately close it (we don't need it).
+	my $input_handle;
+	chdir($RUNFOLDER);
+	my $analysis_pid = open2($LOGHANDLE, $input_handle, @RUNCOMMAND);
+	close($input_handle);
+	waitpid($analysis_pid, 0);
+
+	# Clean up from the analysis command
+	my $analysis_exit_code = $? >> 8;
+	log_msg("==========================================================\n");
+	log_msg("The analysis program exited with $analysis_exit_code\n");
+
+	if ($analysis_exit_code == 0) {
+		log_msg("That's good!\n")
+	} else {
+		log_msg("That's bad 8-(\n");
+	}
 };
 
 # Now that we have our actions, let's execute the code
