@@ -547,7 +547,7 @@ EOF
 	my $email_sender = Email::Send->new({
 		mailer      => 'SMTP',
 		mailer_args => [
-			Host => 'smtp.stanford.edu',
+			Host => 'smtp-unencrypted.stanford.edu',
 		],
 	});
 	my $send_result = $email_sender->send($email->as_string);
