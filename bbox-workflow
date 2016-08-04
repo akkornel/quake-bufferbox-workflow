@@ -192,7 +192,7 @@ EOF
 	my $analysis_pid = open3($input_handle, $output_handle,
 	                         0, @RUNCOMMAND);
 	close($input_handle);
-	while (read($output_handle, $analysis_buffer, 100)) {
+	while (read($output_handle, $analysis_buffer, 10)) {
 		log_msg($analysis_buffer);
 		$analysis_buffer = '';
 	}
