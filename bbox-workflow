@@ -147,6 +147,9 @@ EOL
 	# TODO: Send Email
 	if ($TIMEOUT1 == 0) {
 		log_msg("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
+		log_failure("Gave up waiting for RTAComplete.txt to appear",
+		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
+		            $LOGPATH, $LOG);
 		return;
 	}
 
@@ -209,13 +212,20 @@ EOF
 	# Clean up from the analysis command
 	my $analysis_exit_code = $? >> 8;
 	log_msg("==========================================================\n");
-	log_msg("The analysis program exited with $analysis_exit_code\n");
+	log_msg("The analysis program returned exit code $analysis_exit_code\n");
 
+	# Send an email regarding the analysis
+	# TODO: Send barcodes email
 	if ($analysis_exit_code == 0) {
-		log_msg("That's good!\n")
+		log_msg("That's good! 8-)\n");
 	} else {
 		log_msg("That's bad 8-(\n");
+		email_failure('The analysis program had an error'
+		              'run', $RUNFOLDER,
+		              "$RealBin/email-recipients.txt", $LOGPATH, $LOG);
 	}
+
+	# TODO: Create a workflow-complete.txt marker file
 };
 
 # Now that we have our actions, let's execute the code
