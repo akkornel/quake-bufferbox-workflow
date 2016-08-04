@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Cwd;
-use FindBin qw($RealScript);
+use FindBin qw($RealBin $RealScript);
 use Fcntl qw(:flock);
 use IPC::Open3;
 use Symbol qw(gensym);
@@ -58,10 +58,14 @@ my $LOG = "";
 my $ACTION = undef;
 
 
-
-
 # Now, let's do stuff!
-# First, we're going to find out what our action is
+# First, let's see if we have our email recipients file
+
+
+check_email("$RealBin/email-recipients.txt");
+
+
+# Next, we're going to find out what our action is
 
 
 # We should have at least one argument from the command line
@@ -355,6 +359,53 @@ sub lock_release {
 	flock($LOCKHANDLE, LOCK_UN);
 	close($LOCKHANDLE);
 	undef $LOCKHANDLE;
+	return 1;
+}
+
+
+#
+# Email Subroutines Go Here
+#
+
+
+# check_email: Check (and create) the email configuration file
+sub check_email {
+	my ($path) = @_;
+
+	# Only create if the file doesn't exist
+	if (! -r $path) {
+		log_msg("Missing $path.  Creating now.\n");
+		my $email_handle;
+		open($email_handle, '>', $path) or do {
+			log_msg(<<"EOF");
+We are having problems creating one of our configuration files.
+The file we are trying to create is: $path
+The error we are getting is: $!
+EOF
+			return 0;
+		};
+
+		print $email_handle <<EOF;
+# This file contains the list of email addresses what should be notified
+# whenever something happens.  "something" includes things like...
+# * A run completing, but something being wrong with the sample sheet.
+# * A run completing, and being analyzed successfully.
+# * A run folder appearing, but never completing.
+#
+# The format of this file is simple:
+# * Empty lines are ignored.
+# * Lines which start with a hash (like this one) are ignored.
+# * Other lines are treated as email addresses.
+# To add email addresses, simply add the email address on a new line.
+#
+# NOTE: This file is read right before bbox-workflow tries to send an email.
+
+nobody@stanford.edu
+EOF
+
+		close($email_handle);
+	}
+
 	return 1;
 }
 
