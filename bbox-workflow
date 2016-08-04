@@ -475,19 +475,20 @@ sub email_failure {
 I am emailing you to report that something went wrong.
 
 Here's a couple-word summary of what's going on:
+
 > $message
 
 If a log is available, it is being attached as "workflow-log.txt".
 
-When you have a moment, please investigate.  To re-run the workflow, use the
-following command:
+When you have a moment, please investigate.
+
+To re-run the workflow, use the following command:
 
 $RealBin/$RealScript $action $runfolder
 
 (You can just copy/paste the above line into a PuTTY or SecureCRT session.)
 
-If you still need assistance, please forward this mail (with attachments) to
-research-computing-support\@stanford.edu.
+If you still need assistance, please forward this mail (with attachments) to research-computing-support\@stanford.edu.
 
 Apologies for the inconvenience!
 
@@ -502,6 +503,7 @@ EOF
 			name         => 'workflow-log.txt',
 			content_type => 'text/plain',
 			charset      => 'iso-8859-1',
+			encoding     => 'base64',
 		},
 	);
 
@@ -528,7 +530,7 @@ EOF
 	}
 
 	# Create the email
-	my $email_subject = 'Something went wrong with $RealScript on ' .
+	my $email_subject = "Something went wrong with $RealScript on " .
 	                    hostname();
 	my $email = Email::MIME->create(
 		header_str => [
