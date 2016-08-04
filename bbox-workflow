@@ -21,7 +21,7 @@ my $TIMEOUT1 = 7200;
 
 # $RUNCOMMAND is the command we will run.
 my @RUNCOMMAND = (qw(
-bcl2fastq -l INFO -o Data/Intensities/BaseCalls -p 9 -d 2 --no-lane-splitting
+bcl2fastq -l WARNING -o Data/Intensities/BaseCalls -p 9 -d 2 --no-lane-splitting
 ));
 
 # Next, let's make a big list of global variables.  These all initially start
