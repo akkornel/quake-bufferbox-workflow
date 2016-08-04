@@ -436,7 +436,7 @@ sub email_recipients {
 	while (my $line = <$email_handle>) {
 		# Remove any line endings.  We need to do this specially in case
 		# the file was modified on Windows.
-		$line =~ s{\A(.+)[\r\n]*\z}{$1}xims;
+		$line =~ s{\A(\S+)[\r\n]*\z}{$1}xims;
 
 		# Skip blank lines and comments
 		next if $line =~ m{\A\s+\z}xims;
