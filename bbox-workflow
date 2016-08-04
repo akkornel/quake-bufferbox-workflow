@@ -476,7 +476,7 @@ sub email_failure {
 		}
 	);
 	my $email_body_text = "Hello!\nThis is $RealScript, running on ";
-	$email_body_text .= hostname() . "\n";
+	$email_body_text .= hostname() . '.';
 	$email_body_text .= <<"EOF";
 I am emailing you to report that something went wrong.
 
