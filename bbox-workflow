@@ -7,6 +7,7 @@ use Cwd;
 use FindBin qw($RealScript);
 use Fcntl qw(:flock);
 use IPC::Open2;
+use Symbol qw(gensym);
 
 
 # First, let's set our "constants".  These are settings that aren't likely to
@@ -151,9 +152,9 @@ EOL
 	# Actually run the analysis command.
 	# We send all output to the log directly.  We also make a file handle
 	# for input, but then we immediately close it (we don't need it).
-	my $input_handle;
+	my $input_handle = gensym();
 	chdir($RUNFOLDER);
-	my $analysis_pid = open2($LOGHANDLE, $input_handle, @RUNCOMMAND);
+	my $analysis_pid = open3($LOGHANDLE, $input_handle, $LOGHANDLE, @RUNCOMMAND);
 	close($input_handle);
 	waitpid($analysis_pid, 0);
 
