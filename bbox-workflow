@@ -102,11 +102,10 @@ EOL
 	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
 
 	# Get a lock on our run folder
-	get_lock($RUNFOLDER) or exit(1); {
-EOL
-	};
+	lock_get() or exit(1);
 
 	# Start logging to file
+	log_open() or exit(1);
 };
 
 # Now that we have our actions, let's execute the code
@@ -127,6 +126,7 @@ EOL
 
 # That's it!  Let's exit
 log_close();
+lock_release();
 exit 0;
 
 
@@ -210,7 +210,7 @@ sub log_msg {
 }
 
 # Create and lock our lock file
-sub get_lock {
+sub lock_get {
 	# We already have $LOCKPATH set globally, so we'll use that.
 
 	# First, open the lock file, in append mode.
@@ -245,7 +245,7 @@ EOL
 }
 
 # Release our lock
-sub free_lock {
+sub lock_release {
 	# We already have everything set globally
 	unlink($LOCKPATH);
 	flock($LOCKHANDLE, LOCK_UN);
