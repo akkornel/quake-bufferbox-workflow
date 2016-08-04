@@ -129,7 +129,7 @@ sub log_msg {
 
 	# Next, if the log file is open, output it there
 	if (defined($LOGHANDLE)) {
-		print $LOGHANDLE $message, "\n";
+		print $LOGHANDLE $message;
 	}
 }
 
