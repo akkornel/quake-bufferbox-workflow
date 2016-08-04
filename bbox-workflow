@@ -170,7 +170,7 @@ EOF
 We found an existing Project directory: $1.
 We are renaming this to $1.old.
 (If that directory already exists, we'll add another ".old" to that one,
-and so on, and so on, and ....
+and so on, and so on, and ....)
 EOF
 		my $old_project_path = "$basecalls_path/$1";
 		directory_rename($old_project_path);
