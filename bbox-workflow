@@ -446,8 +446,8 @@ sub email_recipients {
 		push @list, $line;
 	}
 
-	# Return a list ref
-	return \@list;
+	# Return a comma-separated string
+	return join(',', @list);
 }
 
 
@@ -541,7 +541,7 @@ EOF
 		parts      => [ $email_body, $email_file ],
 	);
 	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(join(',', @{email_recipients($config)}) . "\n");
+	log_msg(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
