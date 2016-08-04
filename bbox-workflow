@@ -152,12 +152,13 @@ EOL
 	# Actually run the analysis command.
 	# We send all output to the log directly.  We also make a file handle
 	# for input, but then we immediately close it (we don't need it).
-	my $input_handle = gensym();
+	my $input_handle;
 	my $output_handle = gensym();
 	my $analysis_buffer = '';
 	chdir($RUNFOLDER);
-	my $analysis_pid = open3($output_handle, $input_handle,
-	                         $output_handle, @RUNCOMMAND);
+	my $analysis_pid = open3($input_handle, $output_handle,
+	                         0, @RUNCOMMAND);
+	close($input_handle);
 	while (read($output_handle, $analysis_buffer, 100)) {
 		log_msg($analysis_buffer);
 		$analysis_buffer = '';
