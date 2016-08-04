@@ -144,7 +144,6 @@ EOL
 		sleep(60);
 	}
 	# If we timed out, then exit.
-	# TODO: Send Email
 	if ($TIMEOUT1 == 0) {
 		log_msg("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
 		log_failure("Gave up waiting for RTAComplete.txt to appear",
@@ -220,7 +219,7 @@ EOF
 		log_msg("That's good! 8-)\n");
 	} else {
 		log_msg("That's bad 8-(\n");
-		email_failure('The analysis program had an error'
+		email_failure('The analysis program had an error',
 		              'run', $RUNFOLDER,
 		              "$RealBin/email-recipients.txt", $LOGPATH, $LOG);
 	}
