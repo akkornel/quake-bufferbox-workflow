@@ -143,14 +143,14 @@ sub log_open {
 	}
 
 	# Try opening our log file
-	open($LOGHANDLE, '>', $LOGPATH) or {
+	open($LOGHANDLE, '>', $LOGPATH) or do {
 		log_msg(<<"EOL");
 We are having trouble opening the log file.
 The file we tried to create is: $LOGPATH
 The error we got is: $!
 EOL
 		return 0;
-	}
+	};
 
 	# Put a header into the log file.
 	# Also, if we have anything in our holding variable, output it.
@@ -158,7 +158,7 @@ EOL
 	$LOG = <<"EOL";
 This is the log of the bbox-workflow program!
 This log file was started on: $start_time
-If you need help, please email research-computing-support@stanford.edu
+If you need help, please email research-computing-support\@stanford.edu
 $LOG
 EOL
 	print $LOGHANDLE $LOG;
@@ -183,7 +183,7 @@ sub log_rename {
 sub log_close {
 	return unless defined($LOGHANDLE);
 	my $end_time = localtime(time());
-	print $LOGFILE <<"EOL";
+	print $LOGHANDLE <<"EOL";
 The time is now $end_time.
 Logging complete!
 EOL
@@ -216,7 +216,7 @@ sub lock_get {
 	# First, open the lock file, in append mode.
 	# We open in append mode because we don't want to change anything
 	# immediately.  We'll wait for the lock first.
-	open ($LOCKHANDLE, '>>', $LOCKPATH) or {
+	open ($LOCKHANDLE, '>>', $LOCKPATH) or do {
 		log_msg(<<"EOL");
 We have just tried to create/open the following file:
 $LOCKPATH
@@ -227,7 +227,7 @@ EOL
 	};
 
 	# Actually take the lock.  If already locked, fail immediately.
-	flock($LOCKHANDLE, LOCK_EX | LOCK_NB) or {
+	flock($LOCKHANDLE, LOCK_EX | LOCK_NB) or do {
 		log_msg(<<"EOL");
 It appears that the run folder you specified is already being actively worked
 on by another instance of the workflow program.  You should wait for that other
@@ -240,7 +240,7 @@ EOL
 	# We are locked!  Write in our process ID, and return.
 	truncate($LOCKHANDLE, 0);
 	print $LOCKHANDLE "$$\n";
-	log_msg("Lock file $LOCKATH locked.\n");
+	log_msg("Lock file $LOCKPATH locked.\n");
 	return 1;
 }
 
