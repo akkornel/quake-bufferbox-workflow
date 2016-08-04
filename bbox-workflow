@@ -545,9 +545,16 @@ EOF
 
 	# Send the email
 	my $email_sender = Email::Send->new({
-		mailer => 'sendmail',
+		mailer      => 'SMTP',
+		mailer_args => [
+			Host => 'smtp.stanford.edu',
+		],
 	});
-	$email_sender->send($email->as_string);
+	my $send_result = $email_sender->send($email->as_string);
+	if (!$send_result) {
+		log_msg("Error sending email: $send_result\n");
+		return 0;
+	}
 
 	# Finally, done!
 	return 1;
