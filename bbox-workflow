@@ -266,7 +266,7 @@ sub log_msg {
 	my ($message) = @_;
 
 	# First, print the log entry to standard output
-	print $message, "\n";
+	print $message;
 
 	# Next, if the log file is open, output it there.
 	# If the log file isn't open, then write to our holding variable.
