@@ -158,7 +158,6 @@ EOL
 	chdir($RUNFOLDER);
 	my $analysis_pid = open3($output_handle, $input_handle,
 	                         $output_handle, @RUNCOMMAND);
-	close($input_handle);
 	while (read($output_handle, $analysis_buffer, 100)) {
 		log_msg($analysis_buffer);
 		$analysis_buffer = '';
