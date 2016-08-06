@@ -1,0 +1,89 @@
+
+COMMAND MODES:
+
+- Run: Run on a specified work directory.  This is meant to run manually.
+- Scan: Search a directory for work directories that haven't been processed.  This is meant to be run by cron job.
+- Deliver: Transfer results to the end users.
+
+	Go into /home/bufferbox/XXXXX directory.
+- This is set by the command line.
+	IF running in Scan mode: Do an `ls`, sort, and then pick the last result (tail -n 1).  That is the latest directory to check.  This is our "Work Directory".
+	Check for a file called "workflow-complete.txt".  If this file exists, then skip the directory, because it's been processed.  IF running in Run mode, let the user know that he/she should delete this file, and then re-run the command.
+	Check for "workflow-lock.txt".  If it exists, then read the process ID.  If the process is running, then exit, because we know that the job is being worked on.  If the proces is not running, then log a message, delete the lock file, and continue.
+	Create the file "workflow-lock.txt", and put in the current process ID.  This will serve as a lock.
+	Create the file "workflow-log.txt", and start writing log entries to this file.  IF there is an old workflow-log.txt directory, append a .0 to it.
+
+	Wait for the file "RTAComplete.txt" to appear.  This can take up to X hours.
+* How long can it take for the run to complete, excluding cleanup?
+* Timeout should be 2 days for NextSeq, and 5 days for MiSeq.
+! Email if we run out of time.
+
+	Look for a file "RunCompletionStatus.xml".
+! This file doesn't exist in the MiSeq 
+	Within the file, look for the XML tag "CompletionStatus".  If the string inside the tag is "CompletedAsPlanned", then continue.  If not, then wait.
+* Timeout should be 2 hours, on NextSeq only.  Does not apply to MiSeq.
+* File does not exist in MiSeq.
+* What other values can appear in the "CompletionStatus" tag?
+! Email if we end up seeing an unknown XML Tag.
+
+	Look for a file "RunParameters.xml".
+	Within the file, look for the XML tag "LibraryID".  Capture the string inside the tag.
+	* This entire section doesn't apply for MiSeq.
+
+	Go into /home/bufferbox/gdrive/NS Samplesheets directory
+- The gdrive folder should be configurable.
+- The list of subfolders to pull should also be configurable.
+	Run `drive pull -no-prompt -verbose`.
+	If the exit code is 13, then run `drive pull -no-prompt -verbose -fix-clashes`.
+	If the fix-clashes exit code is 0, then re-start this section.
+	For any other exit codes, error.
+! Email if we have an error here.
+
+	Repeat the above section for the MS Samplesheets directory.
+
+	Search all of our directories for a file matching the following qualifications:
+* File name begins with the LibraryID, then a space, then "SampleSheet".
+* File name ends with .csv.
+	If multiple files are found, then choose the newest one.
+
+---DO VALIDATION HERE---
+
+	Copy the located file into the work directory, using the name "SampleSheet.csv".
+
+	Check to see if anything matching ${WORKDIR}/Data/Intensities/BaseCalls/Project_* exists.
+	If it does, prepend "old_"
+
+	Within the work directory, run the following command:
+
+bcl2fastq -o Data/Intensities/BaseCalls/ -l TRACE -p 9 -d 2 --no-lane-splitting
+
+? We may need to re-run WITHOUT --no-lane-splitting
+? We may need to run WITH --use-bases-mask, which takes an argument.  A text file will be provided that has instructions on how to derive the argument.
+! We need to check for proper completion.
+
+	Email the following file:
+
+${WORKDIR}/Data/Intensities/BaseCalls/Reports/html/??????/all/all/all/laneBarcode.html
+
+	Include instructions on how to continue if things are OK.  This will be a new command run.
+
+	Assuming that the results are OK, then we need to get the data to the person.
+	First, get the username of the person, by looking in ${WORKDIR}/Data/Intensities/BaseCalls, and looking for something called Project_XXXX.  The XXXX is the username.  If we have multiple Project_XXX directories, then we need to do two transfers.
+	Next, find their home directory.  Their home directories are in /b?_?/home*/${USERNAME}.
+	If no home directory is found using the above, then error out with a message that the person doesn't have a home directory.
+	As root, create ${HOMEDIR}/${WORKDIR}
+	As root, copy the contents of Project_XXX to ${HOMEDIR}/${WORKDIR}
+	As root, do a stat of ${HOMEDIR}, and get the userID/groupID
+	As root, chown evertything in ${HOMRDIR}/${WORKDIR}, using the userID/groupID that we just got.
+- If username is "spyros", then use /b7_1/home/spyros ${HOMEDIR}
+
+	Once the transfer is complete, say that things are done and its OK to send the email.
+		Be sure to provide the absolute path to where the data has been copied.
+		Include a reminder to mark the data as delivered in the Queue sheet.
+
+Runs to copy for testing:
+NextSeq/160726_NS500126_0547_AH3Y7YBGXY, corresponds to N253 SampleSheet.csv
+MiSeq/160426_M00361_0306_000000000-AL4UD
+Change Project_* to Project_nfneff
+Also change the Sample Sheet.
+dcroote should get copies.
