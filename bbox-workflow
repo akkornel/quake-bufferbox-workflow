@@ -178,12 +178,13 @@ EOL
 	foreach (my $candidate_runfolder = readdir($searchfolder_handle)) {
 		# Skip dot files
 		next if $candidate_runfolder =~ m{\A[.]}xims;
+		log_msg("Found candidate $candidate_runfolder\n");
 
 		# Skip non-directories
-		next unless -d "$SEARCHFOLDER/$candidate_runfolder";
-
-		# At this point, we have a viable candidate
-		log_msg("Found candidate $candidate_runfolder\n");
+		if (! -d "$SEARCHFOLDER/$candidate_runfolder") {
+			log_msg ("... Skipping.  Not a directory.\n");
+			next;
+		}
 
 		# Skip if we have a workflow-complete.txt file
 		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-complete.txt") {
@@ -198,7 +199,7 @@ EOL
 		}
 
 		# We have a candidate!  Run against it, and exit
-		log_msg("Will run against $SEARCHFOLDER/$candidate_runfolder\n");
+		log_msg("Time to run!\n");
 		unshift @ARGV, "$SEARCHFOLDER/$candidate_runfolder";
 		&{$possible_actions{run}}();
 		return 1;
