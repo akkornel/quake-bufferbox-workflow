@@ -553,7 +553,7 @@ EOF
 	);
 
 	# Get the laneBarcode HTML file, and read it into memory
-	# TODO: Get the laneBarcode path.
+	my $barcode_path = barcode_path($RUNFOLDER);
 	my $barcode_handle;
 	my $barcode_body = '';
 	open($barcode_handle, '<', $barcode_path) or do {
@@ -714,6 +714,38 @@ EOF
 # Other Subroutines Go Here
 # 
 
+
+# Given a runfolder, return the path to the laneBarcode.html file
+sub barcode_path {
+	my ($runfolder) = @_;
+
+	# Start by appeding what we know about the path
+	my $html_path = "$runfolder/Data/Intensities/BaseCalls/Reports/html";
+
+	# Look in our html_path for a directory
+	my $html_handle;
+	my $html_dir;
+	opendir($html_handle, $html_path) or do {
+		log_msg(<<"EOF");
+We have just run into problems trying to find the laneBarcode.html file
+The directory we tried to access is: $html_path
+The error we got is: $!
+EOF
+		return undef;
+	};
+	while (my $candidate = readdir($html_handle)) {
+		next unless -d "$html_path/$candidate";
+		$html_dir = "$html_path/$candidate";
+	}
+	closedir($html_handle);
+
+	# If we found our directory, then return the full path
+	if (defined($html_dir)) {
+		return "$html_dir/all/all/all/laneBarcode.html";
+	} else {
+		return undef;
+	}
+}
 
 # Make sure a path is valid
 sub validate_path {
