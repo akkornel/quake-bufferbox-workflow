@@ -227,6 +227,18 @@ EOF
 	}
 
 	# TODO: Create a workflow-complete.txt marker file
+	my $complete_path = "$RUNDIR/workflow-complete.txt";
+	my $complete_handle;
+	open($complete_handle, '>', $complete_path) or do {
+		log_msg(<<"EOF");
+Unable to open the workflow-complete.txt file for writing!
+Tried to open this file: $complete_path
+Here is the error we received: $!
+EOF
+		return;
+	};
+	print $complete_handle 'Workflow completed at ', localtime(time()), "\n";
+	close($complete_handle);
 };
 
 # Now that we have our actions, let's execute the code
