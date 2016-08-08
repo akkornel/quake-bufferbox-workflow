@@ -175,7 +175,7 @@ The error message we received is: $!
 EOL
 		exit 1;
 	};
-	foreach (my $candidate_runfolder = readdir($searchfolder_handle)) {
+	while (my $candidate_runfolder = readdir($searchfolder_handle)) {
 		log_msg("Found candidate $candidate_runfolder\n");
 
 		# Skip dot files
