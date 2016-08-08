@@ -91,7 +91,7 @@ my %possible_actions;
 
 $possible_actions{help} = sub {
 	print <<"EOF";
-The $0 command can be run in three different ways:
+The $0 command can be run in four different ways:
 
 $0 help              <-- This is what you're doing now
 $0 scan DIRECTORY    <-- Scan a directory for new run folders
@@ -157,7 +157,7 @@ EOL
 	}
 	my $candidate_runfolder = shift @ARGV;
 
-	# Make sure the run folder is valid, and also set $SEARCHFOLDER
+	# Make sure the run folder is valid, and also set $RUNFOLDER
 	$RUNFOLDER = validate_path($candidate_runfolder);
 	if (!defined($RUNFOLDER)) {
 		log_msg(<<"EOL");
