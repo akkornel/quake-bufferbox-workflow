@@ -176,13 +176,17 @@ EOL
 		exit 1;
 	};
 	foreach (my $candidate_runfolder = readdir($searchfolder_handle)) {
-		# Skip dot files
-		next if $candidate_runfolder =~ m{\A[.]}xims;
 		log_msg("Found candidate $candidate_runfolder\n");
+
+		# Skip dot files
+		if ($candidate_runfolder =~ m{\A[.]}xims) {
+			log_msg("... Skipping dotfile.\n");
+			next;
+		}
 
 		# Skip non-directories
 		if (! -d "$SEARCHFOLDER/$candidate_runfolder") {
-			log_msg ("... Skipping.  Not a directory.\n");
+			log_msg("... Skipping.  Not a directory.\n");
 			next;
 		}
 
@@ -200,6 +204,7 @@ EOL
 
 		# We have a candidate!  Run against it, and exit
 		log_msg("Time to run!\n");
+		closedir($searchfolder_handle);
 		unshift @ARGV, "$SEARCHFOLDER/$candidate_runfolder";
 		&{$possible_actions{run}}();
 		return 1;
@@ -207,6 +212,7 @@ EOL
 
 	# If we hit this point, we didn't find anything, so exit
 	log_msg("No viable candidates found.  Exiting.\n");
+	closedir($searchfolder_handle);
 	return 1;
 };
 
