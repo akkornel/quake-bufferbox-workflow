@@ -143,7 +143,70 @@ EOF
 };
 
 $possible_actions{scan} = sub {
-	print "Not ready yet!\n";
+	# Get the search directory from the command line
+	if (scalar(@ARGV) < 1) {
+		log_msg(<<"EOL");
+When using the `scan` action, please provide the path to a directory to search.
+For example: $RealScript scan MiSeq
+EOL
+		exit 1;
+	}
+	my $candidate_searchfolder = shift @ARGV;
+
+	# Make sure the search folder is valid, and also set $SEARCHFOLDER
+	$SEARCHFOLDER = validate_path($candidate_searchfolder);
+	if (!defined($SEARCHFOLDER)) {
+		log_msg(<<"EOL");
+The search folder you provided does not exist, is not a directory, or cannot
+be read.  Please re-run your command with a valid folder path.
+The path your provided is: $candidate_searchfolder
+EOL
+		exit 1;
+	}
+	log_msg("Searching $SEARCHFOLDER for candidate runfolders...\n");
+
+	# Open the search folder, and start looking at what's inside
+	my $searchfolder_handle;
+	opendir($searchfolder_handle, $SEARCHFOLDER) or do {
+		log_msg(<<"EOL");
+We just got an error when trying to open a directory.
+The directory we tried accessing is: $SEARCHFOLDER
+The error message we received is: $!
+EOL
+		exit 1;
+	};
+	foreach (my $candidate_runfolder = readdir($searchfolder_handle)) {
+		# Skip dot files
+		next if $candidate_runfolder =~ m{\A[.]}xims;
+
+		# Skip non-directories
+		next unless -d "$SEARCHFOLDER/$candidate_runfolder";
+
+		# At this point, we have a viable candidate
+		log_msg("Found candidate $candidate_runfolder\n");
+
+		# Skip if we have a workflow-complete.txt file
+		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-complete.txt") {
+			log_msg("... workflow-complete.txt found.  Skipping.\n");
+			next;
+		}
+		
+		# Skip if we have a workflow-lock.txt file
+		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-lock.txt") {
+			log_msg("... workflow-lock.txt found.  Skipping.\n");
+			next;
+		}
+
+		# We have a candidate!  Run against it, and exit
+		log_msg("Will run against $SEARCHFOLDER/$candidate_runfolder\n");
+		unshift @ARGV, "$SEARCHFOLDER/$candidate_runfolder";
+		&{$possible_actions{run}}();
+		return 1;
+	}
+
+	# If we hit this point, we didn't find anything, so exit
+	log_msg("No viable candidates found.  Exiting.\n");
+	return 1;
 };
 
 $possible_actions{run} = sub {
