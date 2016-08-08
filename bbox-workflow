@@ -227,7 +227,7 @@ EOF
 	}
 
 	# TODO: Create a workflow-complete.txt marker file
-	my $complete_path = "$RUNDIR/workflow-complete.txt";
+	my $complete_path = "$RUNFOLDER/workflow-complete.txt";
 	my $complete_handle;
 	open($complete_handle, '>', $complete_path) or do {
 		log_msg(<<"EOF");
