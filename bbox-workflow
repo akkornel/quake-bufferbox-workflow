@@ -214,11 +214,15 @@ EOF
 	log_msg("The analysis program returned exit code $analysis_exit_code\n");
 
 	# Send an email regarding the analysis
-	# TODO: Send barcodes email
 	if ($analysis_exit_code == 0) {
 		log_msg("That's good! 8-)\n");
-		email_complete($RUNFOLDER, "$RealBin/email-recipients.txt",
-		               $LOGPATH);
+		email_analysys($RUNFOLDER, "$RealBin/email-recipients.txt",
+		               $LOGPATH) or do {
+			email_failure('Problems sending the post-analysis mail',
+			              'run', $RUNFOLDER,
+				      "$RealBin/email-recipients.txt", $LOGPATH,
+				      $LOG);
+		};
 	} else {
 		log_msg("That's bad 8-(\n");
 		email_failure('The analysis program had an error',
@@ -226,7 +230,7 @@ EOF
 		              "$RealBin/email-recipients.txt", $LOGPATH, $LOG);
 	}
 
-	# TODO: Create a workflow-complete.txt marker file
+	log_msg("Creating workflow-complete.txt marker file\n");
 	my $complete_path = "$RUNFOLDER/workflow-complete.txt";
 	my $complete_handle;
 	open($complete_handle, '>', $complete_path) or do {
@@ -554,6 +558,7 @@ EOF
 
 	# Get the laneBarcode HTML file, and read it into memory
 	my $barcode_path = barcode_path($RUNFOLDER);
+	return 0 unless defined($barcode_path);
 	my $barcode_handle;
 	my $barcode_body = '';
 	open($barcode_handle, '<', $barcode_path) or do {
