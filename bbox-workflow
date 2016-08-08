@@ -90,7 +90,6 @@ my %possible_actions;
 
 
 $possible_actions{help} = sub {
-	print "Help goes here!\n";
 	print <<"EOF";
 The $0 command can be run in three different ways:
 
