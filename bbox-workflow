@@ -216,7 +216,7 @@ EOF
 	# Send an email regarding the analysis
 	if ($analysis_exit_code == 0) {
 		log_msg("That's good! 8-)\n");
-		email_analysys($RUNFOLDER, "$RealBin/email-recipients.txt",
+		email_analysis($RUNFOLDER, "$RealBin/email-recipients.txt",
 		               $LOGPATH) or do {
 			email_failure('Problems sending the post-analysis mail',
 			              'run', $RUNFOLDER,
