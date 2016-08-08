@@ -139,7 +139,7 @@ Emails are sent in the following cases:
 Emails are sent to the addresses listed in $RealBin/email-recipients.txt
 
 If you have any more questions, please email
-research-computing-support@stanford.edu !
+research-computing-support\@stanford.edu !
 EOF
 };
 
