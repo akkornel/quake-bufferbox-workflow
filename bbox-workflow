@@ -476,12 +476,11 @@ sub email_recipients {
 
 
 # email_analysis: Send an email when the analysis is complete
-# $message: A message explaining what happened.
 # $runfolder: The path to the run folder.
 # $config: Our email recipients config file.
 # $log_path: The path to the log file.
 sub email_analysis {
-	my ($message, $runfolder, $config, $log_path) = @_;
+	my ($runfolder, $config, $log_path) = @_;
 
 	# Create the body part
 	my $email_body = Email::MIME->create(
