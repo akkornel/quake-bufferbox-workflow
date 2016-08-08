@@ -91,6 +91,56 @@ my %possible_actions;
 
 $possible_actions{help} = sub {
 	print "Help goes here!\n";
+	print <<"EOF";
+The $0 command can be run in three different ways:
+
+$0 help              <-- This is what you're doing now
+$0 scan DIRECTORY    <-- Scan a directory for new run folders
+$0 run RUNFOLDER     <-- Run (or re-run) the analysis on a given run folder
+$0 deliver RUNFOLDER <-- Deliver results from a completed run folder.
+
+The "scan" action is used to watch a directory for new run folders.  When a
+run folder is found, it is checked to see if the workflow process has already
+run on it (by looking for a "workflow-complete.txt" file) or if the workflow
+process is running on it right now (by looking for a "workflow-lock.txt" file).
+If a new run folder is found, then the "run" action is begun on it.  This
+process continues until all run folders have been examined, and then the
+workflow program exits.
+
+The "scan" action is meant to be run automatically, for example every 15
+minutes.
+
+The "run" action is used to run, or re-run, the analysis on a specific run
+folder.  This is used in three cases:
+
+1: When the "scan" action is not being used.
+2: When a previous run failed.
+3: When a previous run completed, but something needs to be changed.
+
+The "run" action will not run on a run folder that is already in use, but it
+_will_ run on run folders that have already been processed.  When run on an
+already-processed rundir, existing analysis results (the "Project_" directories)
+will be renamed (by appending ".old" to them).  Old logs will also be kept
+(again, by appending ".old" to them).
+
+The "deliver" action is used to deliver the analysis results to a user, by
+copying them to the user's home directory.
+
+The "deliver" action must be run as root, because it requires access to
+other user's home directories.
+
+Emails are sent in the following cases:
+
+* When an analysis fails, or there is some other problem with a run folder.
+* When an analysis completes successfully.
+* When a delivery is completed.
+* When a delivery cannot be completed, because a home directory is missing.
+
+Emails are sent to the addresses listed in $RealBin/email-recipients.txt
+
+If you have any more questions, please email
+research-computing-support@stanford.edu !
+EOF
 };
 
 $possible_actions{scan} = sub {
