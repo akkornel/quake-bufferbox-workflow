@@ -24,10 +24,10 @@ sub check_email {
 
 	# Only create if the file doesn't exist
 	if (! -r $path) {
-		log_msg("Missing $path.  Creating now.\n");
+		dolog("Missing $path.  Creating now.\n");
 		my $email_handle;
 		open($email_handle, '>', $path) or do {
-			log_msg(<<"EOF");
+			dolog(<<"EOF");
 We are having problems creating one of our configuration files.
 The file we are trying to create is: $path
 The error we are getting is: $!
@@ -147,7 +147,7 @@ EOF
 	my $log_handle;
 	my $log_body = '';
 	open($log_handle, '<', $log_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We have just encounted a problem when trying to re-open our log file.
 The file we were trying to read is: $log_path
 The error we got is: $!
@@ -178,7 +178,7 @@ EOF
 	my $barcode_handle;
 	my $barcode_body = '';
 	open($barcode_handle, '<', $barcode_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We have just encountered a roblem when trying to open the landBarcode HTML file.
 The file we were trying to read is: $barcode_path
 The error we got is: $!
@@ -203,8 +203,8 @@ EOF
 		],
 		parts      => [ $email_body, $email_log, $email_barcode ],
 	);
-	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(email_recipients($config) . "\n");
+	dolog('Sending a ' . length($email->as_string) . '-byte email to ');
+	dolog(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
@@ -215,7 +215,7 @@ EOF
 	});
 	my $send_result = $email_sender->send($email->as_string);
 	if (!$send_result) {
-		log_msg("Error sending email: $send_result\n");
+		dolog("Error sending email: $send_result\n");
 		return 0;
 	}
 
@@ -284,7 +284,7 @@ EOF
 		my $log_handle;
 		my $log_body = '';
 		open($log_handle, '<', $log_path) or do {
-			log_msg(<<"EOF");
+			dolog(<<"EOF");
 We have just encounted a problem when trying to re-open our log file.
 This happened while trying to report an error.
 The file we were trying to read is: $log_path
@@ -312,8 +312,8 @@ EOF
 		],
 		parts      => [ $email_body, $email_file ],
 	);
-	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(email_recipients($config) . "\n");
+	dolog('Sending a ' . length($email->as_string) . '-byte email to ');
+	dolog(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
@@ -324,7 +324,7 @@ EOF
 	});
 	my $send_result = $email_sender->send($email->as_string);
 	if (!$send_result) {
-		log_msg("Error sending email: $send_result\n");
+		dolog("Error sending email: $send_result\n");
 		return 0;
 	}
 
@@ -376,8 +376,8 @@ EOF
 		],
 		parts      => [ $email_body ],
 	);
-	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(email_recipients($config) . "\n");
+	dolog('Sending a ' . length($email->as_string) . '-byte email to ');
+	dolog(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
@@ -388,7 +388,7 @@ EOF
 	});
 	my $send_result = $email_sender->send($email->as_string);
 	if (!$send_result) {
-		log_msg("Error sending email: $send_result\n");
+		dolog("Error sending email: $send_result\n");
 		return 0;
 	}
 
@@ -444,8 +444,8 @@ EOF
 		],
 		parts      => [ $email_body ],
 	);
-	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(email_recipients($config) . "\n");
+	dolog('Sending a ' . length($email->as_string) . '-byte email to ');
+	dolog(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
@@ -456,7 +456,7 @@ EOF
 	});
 	my $send_result = $email_sender->send($email->as_string);
 	if (!$send_result) {
-		log_msg("Error sending email: $send_result\n");
+		dolog("Error sending email: $send_result\n");
 		return 0;
 	}
 
@@ -531,7 +531,7 @@ EOF
 		my $log_handle;
 		my $log_body = '';
 		open($log_handle, '<', $log_path) or do {
-			log_msg(<<"EOF");
+			dolog(<<"EOF");
 We have just encounted a problem when trying to re-open our log file.
 This happened while trying to report an error.
 The file we were trying to read is: $log_path
@@ -556,8 +556,8 @@ EOF
 		],
 		parts      => [ $email_body, $email_file ],
 	);
-	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
-	log_msg(email_recipients($config) . "\n");
+	dolog('Sending a ' . length($email->as_string) . '-byte email to ');
+	dolog(email_recipients($config) . "\n");
 
 	# Send the email
 	my $email_sender = Email::Send->new({
@@ -568,7 +568,7 @@ EOF
 	});
 	my $send_result = $email_sender->send($email->as_string);
 	if (!$send_result) {
-		log_msg("Error sending email: $send_result\n");
+		dolog("Error sending email: $send_result\n");
 		return 0;
 	}
 

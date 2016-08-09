@@ -5,7 +5,6 @@ use warnings;
 
 use Cwd;
 use FindBin qw($RealBin $RealScript);
-use Fcntl qw(:flock);
 use IPC::Open3;
 use Symbol qw(gensym);
 
@@ -13,7 +12,7 @@ use Symbol qw(gensym);
 use lib qw($RealBin);
 require 'bbox-delivery-code.pl';
 require 'bbox-email-code.pl';
-
+require 'bbox-log-lock-code.pl';
 
 
 # First, let's set our "constants".  These are settings that aren't likely to
@@ -76,7 +75,7 @@ check_email("$RealBin/email-recipients.txt");
 
 # We should have at least one argument from the command line
 if (scalar(@ARGV) < 1) {
-	log_msg(<<"EOL");
+	dolog(<<"EOL");
 Please specify an action to perform, like 'scan' or 'run'.
 For example: $RealScript scan NextSeq
 Or: $RealScript run NextSeq/160804-NS500126-123-BDGEJMGM
@@ -148,7 +147,7 @@ EOF
 $possible_actions{scan} = sub {
 	# Get the search directory from the command line
 	if (scalar(@ARGV) < 1) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 When using the `scan` action, please provide the path to a directory to search.
 For example: $RealScript scan MiSeq
 EOL
@@ -159,19 +158,19 @@ EOL
 	# Make sure the search folder is valid, and also set $SEARCHFOLDER
 	$SEARCHFOLDER = validate_path($candidate_searchfolder);
 	if (!defined($SEARCHFOLDER)) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 The search folder you provided does not exist, is not a directory, or cannot
 be read.  Please re-run your command with a valid folder path.
 The path your provided is: $candidate_searchfolder
 EOL
 		exit 1;
 	}
-	log_msg("Searching $SEARCHFOLDER for candidate runfolders...\n");
+	dolog("Searching $SEARCHFOLDER for candidate runfolders...\n");
 
 	# Open the search folder, and start looking at what's inside
 	my $searchfolder_handle;
 	opendir($searchfolder_handle, $SEARCHFOLDER) or do {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 We just got an error when trying to open a directory.
 The directory we tried accessing is: $SEARCHFOLDER
 The error message we received is: $!
@@ -179,34 +178,34 @@ EOL
 		exit 1;
 	};
 	while (my $candidate_runfolder = readdir($searchfolder_handle)) {
-		log_msg("Found candidate $candidate_runfolder\n");
+		dolog("Found candidate $candidate_runfolder\n");
 
 		# Skip dot files
 		if ($candidate_runfolder =~ m{\A[.]}xims) {
-			log_msg("... Skipping dotfile.\n");
+			dolog("... Skipping dotfile.\n");
 			next;
 		}
 
 		# Skip non-directories
 		if (! -d "$SEARCHFOLDER/$candidate_runfolder") {
-			log_msg("... Skipping.  Not a directory.\n");
+			dolog("... Skipping.  Not a directory.\n");
 			next;
 		}
 
 		# Skip if we have a workflow-complete.txt file
 		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-complete.txt") {
-			log_msg("... workflow-complete.txt found.  Skipping.\n");
+			dolog("... workflow-complete.txt found.  Skipping.\n");
 			next;
 		}
 		
 		# Skip if we have a workflow-lock.txt file
 		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-lock.txt") {
-			log_msg("... workflow-lock.txt found.  Skipping.\n");
+			dolog("... workflow-lock.txt found.  Skipping.\n");
 			next;
 		}
 
 		# We have a candidate!  Run against it, and exit
-		log_msg("Time to run!\n");
+		dolog("Time to run!\n");
 		closedir($searchfolder_handle);
 		unshift @ARGV, "$SEARCHFOLDER/$candidate_runfolder";
 		&{$possible_actions{run}}();
@@ -214,7 +213,7 @@ EOL
 	}
 
 	# If we hit this point, we didn't find anything, so exit
-	log_msg("No viable candidates found.  Exiting.\n");
+	dolog("No viable candidates found.  Exiting.\n");
 	closedir($searchfolder_handle);
 	return 1;
 };
@@ -222,7 +221,7 @@ EOL
 $possible_actions{run} = sub {
 	# Get the run folder from the command line
 	if (scalar(@ARGV) < 1) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 When using the `run` action, please provide the path to the run folder.
 For example: $RealScript run 160804-NS500126-0555-ABCDEFG
 EOL
@@ -233,7 +232,7 @@ EOL
 	# Make sure the run folder is valid, and also set $RUNFOLDER
 	$RUNFOLDER = validate_path($candidate_runfolder);
 	if (!defined($RUNFOLDER)) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 The run folder you provided does not exist, is not a directory, or cannot be
 read.  Please re-run your command with a valid folder path.
 The path you provided is: $candidate_runfolder
@@ -247,17 +246,19 @@ EOL
 	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
 
 	# Get a lock on our run folder
-	lock_get() or exit(1);
+	$LOCKHANDLE = lock_get($LOCKPATH, $LOGPATH);
+	exit(1) unless $LOCKHANDLE;
 
 	# Start logging to file
-	log_open() or exit(1);
+	$LOGHANDLE = log_open($LOGPATH, \$LOG);
+	exit(1) unless $LOGHANDLE;
 
 	# Wait for RTAComplete.txt to appear
-	log_msg("Waiting for $RUNFOLDER/RTAComplete.txt to appear...\n");
+	dolog("Waiting for $RUNFOLDER/RTAComplete.txt to appear...\n");
 	while ($TIMEOUT1 > 0) {
 		# If the file exists, then stop the loop
 		if (-r "$RUNFOLDER/RTAComplete.txt") {
-			log_msg("File found!\n");
+			dolog("File found!\n");
 			last;
 		}
 
@@ -267,7 +268,7 @@ EOL
 	}
 	# If we timed out, then exit.
 	if ($TIMEOUT1 == 0) {
-		log_msg("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
+		dolog("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
 		log_failure("Gave up waiting for RTAComplete.txt to appear",
 		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
 		            $LOGPATH, $LOG);
@@ -278,7 +279,7 @@ EOL
 	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
 	my $basecalls_handle;
 	opendir($basecalls_handle, $basecalls_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 The BaseCalls directory does not exist, is not a directory, or cannot be read.
 Please make sure you are running this command with a valid run folder!
 The directory we are trying to open is: $basecalls_path
@@ -297,7 +298,7 @@ EOF
 		                   }xims;
 
 		# Rename the directory (this might recurse)
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We found an existing Project directory: $1.
 We are renaming this to $1.old.
 (If that directory already exists, we'll add another ".old" to that one,
@@ -308,10 +309,10 @@ EOF
 	}
 
 	# Get ready to run the analysis command
-	log_msg("Running the analysis!\n");
-	log_msg("Analysis command: " . join(' ', @RUNCOMMAND) . "\n");
-	log_msg("Analysys command output:\n");
-	log_msg("==========================================================\n");
+	dolog("Running the analysis!\n");
+	dolog("Analysis command: " . join(' ', @RUNCOMMAND) . "\n");
+	dolog("Analysys command output:\n");
+	dolog("==========================================================\n");
 
 	# Actually run the analysis command.
 	# We send all output to the log directly.  We also make a file handle
@@ -324,7 +325,7 @@ EOF
 	                         0, @RUNCOMMAND);
 	close($input_handle);
 	while (read($output_handle, $analysis_buffer, 10)) {
-		log_msg($analysis_buffer);
+		dolog($analysis_buffer);
 		$analysis_buffer = '';
 	}
 	waitpid($analysis_pid, 0);
@@ -332,12 +333,12 @@ EOF
 
 	# Clean up from the analysis command
 	my $analysis_exit_code = $? >> 8;
-	log_msg("==========================================================\n");
-	log_msg("The analysis program returned exit code $analysis_exit_code\n");
+	dolog("==========================================================\n");
+	dolog("The analysis program returned exit code $analysis_exit_code\n");
 
 	# Send an email regarding the analysis
 	if ($analysis_exit_code == 0) {
-		log_msg("That's good! 8-)\n");
+		dolog("That's good! 8-)\n");
 		email_analysis($RUNFOLDER, "$RealBin/email-recipients.txt",
 		               $LOGPATH, $RealBin, $RealScript) or do {
 			email_failure('Problems sending the post-analysis mail',
@@ -346,18 +347,18 @@ EOF
 				      $LOG, $RealBin, $RealScript);
 		};
 	} else {
-		log_msg("That's bad 8-(\n");
+		dolog("That's bad 8-(\n");
 		email_failure('The analysis program had an error',
 		              'run', $RUNFOLDER,
 		              "$RealBin/email-recipients.txt", $LOGPATH, $LOG,
 		              $RealBin, $RealScript);
 	}
 
-	log_msg("Creating workflow-complete.txt marker file\n");
+	dolog("Creating workflow-complete.txt marker file\n");
 	my $complete_path = "$RUNFOLDER/workflow-complete.txt";
 	my $complete_handle;
 	open($complete_handle, '>', $complete_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 Unable to open the workflow-complete.txt file for writing!
 Tried to open this file: $complete_path
 Here is the error we received: $!
@@ -373,7 +374,7 @@ $possible_actions{deliver} = sub {
 	# Get the run folder from the command line
 	# (Same as with the `run` action)
 	if (scalar(@ARGV) < 1) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 When using the `run` action, please provide the path to the run folder.
 For example: $RealScript run 160804-NS500126-0555-ABCDEFG
 EOL
@@ -385,7 +386,7 @@ EOL
 	# (Same as with the `run` action)
 	$RUNFOLDER = validate_path($candidate_runfolder);
 	if (!defined($RUNFOLDER)) {
-		log_msg(<<"EOL");
+		dolog(<<"EOL");
 The run folder you provided does not exist, is not a directory, or cannot be
 read.  Please re-run your command with a valid folder path.
 The path you provided is: $candidate_runfolder
@@ -411,9 +412,9 @@ EOL
 	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
 	my $basecalls_handle;
 	my @candidate_projects;
-	log_msg("Searching for Project directories...\n");
+	dolog("Searching for Project directories...\n");
 	opendir($basecalls_handle, $basecalls_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We had a problem accessing the BaseCalls directory.
 The path we tried to access is: $basecalls_path
 The error we got is: $!
@@ -422,18 +423,18 @@ EOF
 	};
 	while (my $project_name = readdir($basecalls_handle)) {
 		if ($project_name !~ m{\AProject_[a-z0-9]+\z}xims) {
-			log_msg("$project_name doesn't look like a Project.  ");
-			log_msg("Skipping...\n");
+			dolog("$project_name doesn't look like a Project.  ");
+			dolog("Skipping...\n");
 			next;
 		}
 
-		log_msg("Found Project directory $project_name\n");
+		dolog("Found Project directory $project_name\n");
 		push @candidate_projects, $project_name;
 	}
 
 	# Exit if we don't find any Project directories
 	if (!scalar(@candidate_projects)) {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We could not find any Project directories.
 The run folder we were searching is: $RUNFOLDER
 Please make sure that an analysis was completed, and try your command again.
@@ -448,7 +449,7 @@ EOF
 			$RealScript);
 	}
 
-	log_msg("Delivery complete!\n");
+	dolog("Delivery complete!\n");
 	return;
 };
 
@@ -459,7 +460,7 @@ if (exists($possible_actions{$ACTION})) {
 	&{$possible_actions{$ACTION}};
 }
 else {
-	log_msg(<<"EOL");
+	dolog(<<"EOL");
 The action you specified, $ACTION, is not a known action.
 You have three possible actions:
 * scan: Scan a given directory for unprocessed work folders.
@@ -469,146 +470,26 @@ EOL
 }
 
 # That's it!  Let's exit
-log_close();
-lock_release();
+log_close($LOGHANDLE);
+undef $LOGHANDLE;
+lock_release($LOCKPATH, $LOCKHANDLE);
+undef $LOCKPATH;
+undef $LOCKHANDLE;
 exit 0;
-
-
-#
-# Logging and Locking Subroutines Go Here
-# 
-
-
-# Open our log file
-sub log_open {
-	# If our log file exists, then rename it by appending ".old".
-	if (-r $LOGPATH) {
-		log_rename($LOGPATH);
-	}
-
-	# Try opening our log file, and set autoflush
-	# autoflush, in particular, is important: If we don't do that, and we
-	# have to send the log file somewhere, it might not all be written to
-	# disk.
-	open($LOGHANDLE, '>', $LOGPATH) or do {
-		log_msg(<<"EOL");
-We are having trouble opening the log file.
-The file we tried to create is: $LOGPATH
-The error we got is: $!
-EOL
-		return 0;
-	};
-	my $old_handle = select($LOGHANDLE);
-	$| = 1;
-	select($old_handle);
-
-	# Put a header into the log file.
-	# Also, if we have anything in our holding variable, output it.
-	my $start_time = localtime(time());
-	$LOG = <<"EOL";
-This is the log of the bbox-workflow program!
-This log file was started on: $start_time
-If you need help, please email research-computing-support\@stanford.edu
-$LOG
-EOL
-	print $LOGHANDLE $LOG;
-	$LOG = '';
-
-	# The log is ready to go!
-	return 1;
-}
-
-# Rename a log file, by appending .old
-# We make this a separate subroutine because we might recurse.
-sub log_rename {
-	my ($file) = @_;
-	if (-r "$file.old") {
-		log_rename("$file.old");
-	}
-	rename($file, "$file.old");
-	return 1;
-}
-
-# Close the log
-sub log_close {
-	return unless defined($LOGHANDLE);
-	my $end_time = localtime(time());
-	print $LOGHANDLE <<"EOL";
-The time is now $end_time.
-Logging complete!
-EOL
-
-	close($LOGHANDLE);
-	undef $LOGHANDLE;
-	return 1;
-}
-	
-# Log stuff
-sub log_msg {
-	my ($message) = @_;
-
-	# First, print the log entry to standard output
-	print $message;
-
-	# Next, if the log file is open, output it there.
-	# If the log file isn't open, then write to our holding variable.
-	if (defined($LOGHANDLE)) {
-		print $LOGHANDLE $message;
-	} else {
-		$LOG .= $message;
-	}
-}
-
-# Create and lock our lock file
-sub lock_get {
-	# We already have $LOCKPATH set globally, so we'll use that.
-
-	# First, open the lock file, in append mode.
-	# We open in append mode because we don't want to change anything
-	# immediately.  We'll wait for the lock first.
-	open ($LOCKHANDLE, '>>', $LOCKPATH) or do {
-		log_msg(<<"EOL");
-We have just tried to create/open the following file:
-$LOCKPATH
-However, we got this error: $!
-This should not happen.  Please contact Support!
-EOL
-		return 0;
-	};
-
-	# Actually take the lock.  If already locked, fail immediately.
-	flock($LOCKHANDLE, LOCK_EX | LOCK_NB) or do {
-		log_msg(<<"EOL");
-It appears that the run folder you specified is already being actively worked
-on by another instance of the workflow program.  You should wait for that other
-instance to complete.  To see what it's doing, you can look at the log file,
-which should be here: $LOGPATH
-EOL
-		return 0;
-	};
-
-	# We are locked!  Write in our process ID, and return.
-	truncate($LOCKHANDLE, 0);
-	print $LOCKHANDLE "$$\n";
-	log_msg("Lock file $LOCKPATH locked.\n");
-	return 1;
-}
-
-# Release our lock
-sub lock_release {
-	# We already have everything set globally
-	return unless defined($LOCKHANDLE);
-	unlink($LOCKPATH);
-	flock($LOCKHANDLE, LOCK_UN);
-	close($LOCKHANDLE);
-	undef $LOCKHANDLE;
-	return 1;
-}
 
 
 #
 # Other Subroutines Go Here
 # 
+
+# dolog: This is a convenience subroutine to log something.  The logging code
+# needs a handle and scalar ref passed in, which would be annoying if needed on
+# every call.
+# $msg: The message to log.
+sub dolog {
+	my ($msg) = @_;
+	return log_msg($LOGHANDLE, \$LOG, $msg);
+}
 
 
 # Given a runfolder, return the path to the laneBarcode.html file
@@ -622,7 +503,7 @@ sub barcode_path {
 	my $html_handle;
 	my $html_dir;
 	opendir($html_handle, $html_path) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We have just run into problems trying to find the laneBarcode.html file
 The directory we tried to access is: $html_path
 The error we got is: $!

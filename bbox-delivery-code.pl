@@ -24,7 +24,7 @@ use File::Copy;
 # $script_name: The name of the script being run.
 sub deliver {
 	my ($runfolder, $project, $email, $log, $bin_path, $script_name) = @_;
-	log_msg("Starting delivery for $project\n");
+	dolog("Starting delivery for $project\n");
 
 	# Extract the username
 	$project =~ m{\AProject_(.+)\z}xims;
@@ -42,7 +42,7 @@ sub deliver {
 
 	# If we don't find anything, send an email and return
 	if (!scalar(@homedirs)) {
-		log_msg("No home directory found for $username!\n");
+		dolog("No home directory found for $username!\n");
 		email_delivery_manual("$project_path/$project", $email,
 			              $script_name);
 		return 1;
@@ -51,7 +51,7 @@ sub deliver {
 
 	# Now, let's get to work
 	# Start by getting the user's UID and GID.
-	log_msg("Will do delivery to user $username\n");
+	dolog("Will do delivery to user $username\n");
 	my @homedir_stat = stat($homedir);
 	my $homedir_mode = $homedir_stat[2] & 07777;
 	my $homedir_uid = $homedir_stat[4];
@@ -73,8 +73,8 @@ sub deliver {
 		}
 	}
 	my $destination = "$homedir/$runfolder_name$runfolder_suffix";
-	log_msg("Will deliver files to $destination ");
-	log_msg(sprintf("(mode %o)\n", $homedir_mode));
+	dolog("Will deliver files to $destination ");
+	dolog(sprintf("(mode %o)\n", $homedir_mode));
 
 	# Create the directory to hold everything
 	mkdir($destination, $homedir_mode);
@@ -110,7 +110,7 @@ sub deliver_directory {
 	# Start listing the source directory contents
 	my $source_handle;
 	opendir($source_handle, $source) or do {
-		log_msg(<<"EOF");
+		dolog(<<"EOF");
 We were unable to read the source directory for our copy.
 The directory we tried to read is: $source
 The error we got is: $!
@@ -126,13 +126,13 @@ EOF
 		# Work out the file/directory target and mode
 		my $target = "$destination/$item";
 		my $mode = (stat("$source/$item"))[2] & 07777;
-		log_msg("$source/$item -> $target, ");
-		log_msg(sprintf("mode %o\n", $mode));
+		dolog("$source/$item -> $target, ");
+		dolog(sprintf("mode %o\n", $mode));
 
 		# Files are easy enough to copy
 		if (-f "$source/$item") {
 			File::Copy::copy("$source/$item", $target) or do {
-				log_msg(<<"EOF");
+				dolog(<<"EOF");
 We were unable to copy $item to its destination, because of an error.
 The file we tried to copy is: $source/$item
 The destination was: $target
@@ -155,8 +155,8 @@ EOF
 
 		# Skip other stuff
 		else {
-			log_msg("Skipping $source/$item, which is neither a ");
-			log_msg("file nor a directory.\n");
+			dolog("Skipping $source/$item, which is neither a ");
+			dolog("file nor a directory.\n");
 		}
 	}
 
