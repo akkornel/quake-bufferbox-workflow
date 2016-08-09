@@ -1041,7 +1041,8 @@ sub deliver {
 		}
 	}
 	my $destination = "$homedir/$runfolder_name$runfolder_suffix";
-	log_msg("Will deliver files to $destination\n");
+	log_msg("Will deliver files to $destination ");
+	log_msg(sprintf("(mode %o)\n", $homedir_mode));
 
 	# Create the directory to hold everything
 	mkdir($destination, $homedir_mode);
@@ -1079,7 +1080,8 @@ EOF
 		# Work out the file/directory target and mode
 		my $target = "$destination/$item";
 		my $mode = (stat("$source/$item"))[2] & 07777;
-		log_msg("$source/$item -> $target, mode $mode\n");
+		log_msg("$source/$item -> $target, ");
+		log_msg(sprintf("mode %o\n", $mode));
 
 		# Files are easy enough to copy
 		if (-f "$source/$item") {
