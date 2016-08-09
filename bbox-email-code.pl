@@ -16,6 +16,9 @@ use Sys::Hostname;
 # NOTE: This code relies heavily on log_* subroutines.  Those subroutines must
 # be loaded into the same scope as this code, or else things will fail.
 
+# This file is Copyright (C) 2016 The Board of Trustees of the Leland Stanford
+# Jr. University.  All rights reserved.
+
 
 # check_email: Check (and create) the email configuration file.
 # $path: The path to the configuration file.

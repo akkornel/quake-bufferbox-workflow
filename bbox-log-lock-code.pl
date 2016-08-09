@@ -11,6 +11,9 @@ use Fcntl qw(:flock);
 #
 # This support script has all of the lockfile and logging code.
 
+# This file is Copyright (C) 2016 The Board of Trustees of the Leland Stanford
+# Jr. University.  All rights reserved.
+
 
 # log_open: Open our log file, naming any file in place.
 # $log_path: The path to the log file, which might exist.

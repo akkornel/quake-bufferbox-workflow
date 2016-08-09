@@ -14,6 +14,9 @@ use File::Copy;
 # NOTE: This code relies heavily on log_* subroutines.  Those subroutines must
 # be loaded into the same scope as this code, or else things will fail.
 
+# This file is Copyright (C) 2016 The Board of Trustees of the Leland Stanford
+# Jr. University.  All rights reserved.
+
 
 # deliver: Deliver files for a given project
 # $runfolder The path to the run folder.
