@@ -916,6 +916,70 @@ EOF
 }
 
 
+# email_delivery_manual: Send an email when manual delivery is necessary
+# $project: The path to the Project directory.
+# $config: Our email recipients config file.
+# $log_path: The path to the log file, or undef (if there is no log file).
+sub email_delivery_manual {
+	my ($project, $config) = @_;
+
+	# Create the body part
+	my $email_body = Email::MIME->create(
+		attributes => {
+			content_type => 'text/plain',
+			charset      => 'UTF-8',
+			encoding     => 'quoted-printable',
+		}
+	);
+	my $email_body_text = "Hello!\n\nThis is $RealScript, running on ";
+	$email_body_text .= hostname() . '.  ';
+	$email_body_text .= <<"EOF";
+I am emailing you to report that I tried to deliver Project results to someone, but it appears the associated username does not have a local account.
+
+The Project directory can be found here:
+
+$project
+
+Please contact the user and arrange to deliver the results to them.
+
+Apologies for the inconvenience!
+
+~ Mr. Workflow
+EOF
+	$email_body->body_str_set($email_body_text);
+
+	# Create the email
+	my $email_subject = 'Project results ready for manual delivery (from ' .
+	                    "$RealScript on " . hostname() . ')';
+	my $email = Email::MIME->create(
+		header_str => [
+			From    => 'noreply@stanford.edu',
+			To      => email_recipients($config),
+			Subject => $email_subject,
+		],
+		parts      => [ $email_body ],
+	);
+	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
+	log_msg(email_recipients($config) . "\n");
+
+	# Send the email
+	my $email_sender = Email::Send->new({
+		mailer      => 'SMTP',
+		mailer_args => [
+			Host => 'smtp-unencrypted.stanford.edu',
+		],
+	});
+	my $send_result = $email_sender->send($email->as_string);
+	if (!$send_result) {
+		log_msg("Error sending email: $send_result\n");
+		return 0;
+	}
+
+	# Finally, done!
+	return 1;
+}
+
+
 #
 # Other Subroutines Go Here
 # 
@@ -932,6 +996,7 @@ sub deliver {
 
 	# Extract the username
 	$project =~ m{\AProject_(.+)\z}xims;
+	my $project_path = "$runfolder/Data/Intensities/BaseCalls";
 	my $username = $1;
 
 	# Search for any home directories matching this username
@@ -946,6 +1011,7 @@ sub deliver {
 	# If we don't find anything, send an email and return
 	if (!scalar(@homedirs)) {
 		log_msg("No home directory found for $username!\n");
+		email_delivery_manual("$project_path/$project", $email);
 		return 1;
 	}
 
