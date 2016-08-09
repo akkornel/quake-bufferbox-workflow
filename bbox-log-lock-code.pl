@@ -156,3 +156,7 @@ sub lock_release {
 	close($lock_handle);
 	return 1;
 }
+
+
+# End on a true value.
+1;
