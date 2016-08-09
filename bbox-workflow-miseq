@@ -6,6 +6,7 @@ use warnings;
 use Cwd;
 use Email::MIME;
 use Email::Send;
+use File::Copy;
 use FindBin qw($RealBin $RealScript);
 use Fcntl qw(:flock);
 use IPC::Open3;
@@ -1014,13 +1015,107 @@ sub deliver {
 		email_delivery_manual("$project_path/$project", $email);
 		return 1;
 	}
+	my $homedir = shift @homedirs;
 
 	# Now, let's get to work
+	# Start by getting the user's UID and GID.
 	log_msg("Will do delivery to user $username\n");
+	my @homedir_stat = stat($homedir);
+	my $homedir_mode = $homedir_stat[3] & 07777;
+	my $homedir_uid = $homedir_stat[4];
+	my $homedir_gid = $homedir_stat[5];
+
+	# Figure out what to call the folder name
+	# We prefer to use the runfolder name, but if that exists already, then
+	# fall back to some suffix like .0, .1, etc.
+	my $runfolder_name = $runfolder;
+	$runfolder_name =~ s{\A.+/(.+)\z}{$1}xims;
+	my $i = -1;
+	my $runfolder_suffix = '';
+	while (-r "$homedir/$runfolder_name$runfolder_suffix") {
+		if ($runfolder_suffix eq '') {
+			$runfolder_suffix = '.0';
+		} else {
+			$i++;
+			$runfolder_suffix = ".$i";
+		}
+	}
+	my $destination = "$homedir/$runfolder_name$runfolder_suffix";
+	log_msg("Will deliver files to $destination");
+
+	# Create the directory to hold everything
+	mkdir($destination, $homedir_mode);
+	chown($homedir_uid, $homedir_gid, $destination);
+
+	# Now let's begin to deliver everything
+	deliver_directory("$project_path/$project", $destination,
+	                  $homedir_uid, $homedir_gid);
 
 	# All done!
 	return 1;
 }
+
+
+# deliver_directory: Copy a directory to the destination, and chown
+sub deliver_directory {
+	my ($source, $destination, $uid, $gid) = @_;
+
+	# Start listing the source directory contents
+	my $source_handle;
+	opendir($source_handle, $source) or do {
+		log_msg(<<"EOF");
+We were unable to read the source directory for our copy.
+The directory we tried to read is: $source
+The error we got is: $!
+EOF
+		return 0;
+	};
+
+	# Copy everything we find (but not . or ..)
+	while (my $item = readdir($source_handle)) {
+		next if $item eq '.';
+		next if $item eq '..';
+
+		# Work out the file/directory target and mode
+		my $target = "$destination/$item";
+		my $mode = (stat("$source/$item"))[2] & 07777;
+		log_msg("$source/$item -> $target, mode $mode\n");
+
+		# Files are easy enough to copy
+		if (-f "$source/$item") {
+			File::Copy::copy("$source/$item", $target) or do {
+				log_msg(<<"EOF");
+We were unable to copy $item to its destination, because of an error.
+The file we tried to copy is: $source/$item
+The destination was: $target
+The error is: $!
+EOF
+				return 0;
+			};
+			chmod($mode, $target);
+			chown($uid, $gid, $target);
+		}
+
+		# For directories, we make the directory and then recurse
+		elsif (-d "$source/$item") {
+			mkdir($target, $mode);
+			chown($uid, $gid, $target);
+			my $res = deliver_directory("$source/$item", $target);
+			return $res unless $res == 1;
+		}
+
+		# Skip other stuff
+		else {
+			log_msg("Skipping $source/$item, which is neither a ");
+			log_msg("file nor a directory.\n");
+		}
+	}
+
+	# All done with this directory!
+	closedir($source_handle);
+	return 1;
+}
+
 
 # Given a runfolder, return the path to the laneBarcode.html file
 sub barcode_path {
