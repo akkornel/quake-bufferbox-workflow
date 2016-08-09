@@ -55,7 +55,7 @@ EOF
 
 nobody\@stanford.edu
 EOF
-
+		chmod(0664, $email_handle);
 		close($email_handle);
 	}
 
