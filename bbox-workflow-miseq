@@ -920,7 +920,6 @@ EOF
 # email_delivery_manual: Send an email when manual delivery is necessary
 # $project: The path to the Project directory.
 # $config: Our email recipients config file.
-# $log_path: The path to the log file, or undef (if there is no log file).
 sub email_delivery_manual {
 	my ($project, $config) = @_;
 
@@ -959,6 +958,183 @@ EOF
 			Subject => $email_subject,
 		],
 		parts      => [ $email_body ],
+	);
+	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
+	log_msg(email_recipients($config) . "\n");
+
+	# Send the email
+	my $email_sender = Email::Send->new({
+		mailer      => 'SMTP',
+		mailer_args => [
+			Host => 'smtp-unencrypted.stanford.edu',
+		],
+	});
+	my $send_result = $email_sender->send($email->as_string);
+	if (!$send_result) {
+		log_msg("Error sending email: $send_result\n");
+		return 0;
+	}
+
+	# Finally, done!
+	return 1;
+}
+
+# email_delivery_complete: Send an email when automatic delivery completed
+# $project: The path to the Project directory.
+# $destination: The place where everything was copied.
+# $config: Our email recipients config file.
+sub email_delivery_complete {
+	my ($project, $destination, $config) = @_;
+
+	# Create the body part
+	my $email_body = Email::MIME->create(
+		attributes => {
+			content_type => 'text/plain',
+			charset      => 'UTF-8',
+			encoding     => 'quoted-printable',
+		}
+	);
+	my $email_body_text = "Hello!\n\nThis is $RealScript, running on ";
+	$email_body_text .= hostname() . '.  ';
+	$email_body_text .= <<"EOF";
+I am emailing you to report that I have successfully delivered Project results!
+
+I copied files from the following Project directory:
+
+$project
+
+The files have been copied to the following location:
+
+$destination
+
+Please pull whatever other reports are needed, and let the user know that his/her files are ready.
+
+Have a great day.  Go Tree!
+
+~ Mr. Workflow
+EOF
+	$email_body->body_str_set($email_body_text);
+
+	# Create the email
+	my $email_subject = 'Project results delivered! (from ' .
+	                    "$RealScript on " . hostname() . ')';
+	my $email = Email::MIME->create(
+		header_str => [
+			From    => 'noreply@stanford.edu',
+			To      => email_recipients($config),
+			Subject => $email_subject,
+		],
+		parts      => [ $email_body ],
+	);
+	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
+	log_msg(email_recipients($config) . "\n");
+
+	# Send the email
+	my $email_sender = Email::Send->new({
+		mailer      => 'SMTP',
+		mailer_args => [
+			Host => 'smtp-unencrypted.stanford.edu',
+		],
+	});
+	my $send_result = $email_sender->send($email->as_string);
+	if (!$send_result) {
+		log_msg("Error sending email: $send_result\n");
+		return 0;
+	}
+
+	# Finally, done!
+	return 1;
+}
+
+
+# email_delivery_problem: Send an email when the delivery didn't work.
+# $runfolder: The path to the run folder.
+# $project: The path to the Project_ directory.
+# $destination: The place where we tried to do the copy.
+# $config: Our email recipients config file.
+# $log_path: The path to the log file, or undef (if there is no log file).
+sub email_delivery_problem {
+	my ($runfolder, $project, $destination, $config, $log_path) = @_;
+
+	# Create the body part
+	my $email_body = Email::MIME->create(
+		attributes => {
+			content_type => 'text/plain',
+			charset      => 'UTF-8',
+			encoding     => 'quoted-printable',
+		}
+	);
+	my $email_body_text = "Hello!\n\nThis is $RealScript, running on ";
+	$email_body_text .= hostname() . '.  ';
+	$email_body_text .= <<"EOF";
+I am emailing you to report that something went wrong.
+
+We were attempting to do a delivery, but that delivery failed.
+
+We tried copying the following Project_ directory:
+
+$project
+
+We tried copying to the following location:
+
+$destination
+
+If a log is available, it is being attached as "workflow-log.txt".
+
+When you have a moment, please investigate.  To re-run the delivery, use the following command:
+
+sudo $RealBin/$RealScript deliver $runfolder
+
+(You can just copy/paste the above line into a PuTTY or SecureCRT session.)
+
+If you still need assistance, please forward this mail (with attachments) to research-computing-support\@stanford.edu.
+
+Apologies for the inconvenience!
+
+~ Mr. Workflow
+EOF
+	$email_body->body_str_set($email_body_text);
+
+	# Create the log file attachment
+	my $email_file = Email::MIME->create(
+		attributes => {
+			disposition  => 'attachment',
+			name         => 'workflow-log.txt',
+			content_type => 'text/plain',
+			charset      => 'iso-8859-1',
+			encoding     => 'base64',
+		},
+	);
+
+	# If we have a log file, then re-read it into memory
+	if (defined($log_path)) {
+		my $log_handle;
+		my $log_body = '';
+		open($log_handle, '<', $log_path) or do {
+			log_msg(<<"EOF");
+We have just encounted a problem when trying to re-open our log file.
+This happened while trying to report an error.
+The file we were trying to read is: $log_path
+The error we got is: $!
+EOF
+			return 0;
+		};
+		while (my $line = <$log_handle>) {
+			$log_body .= $line . "\n";
+		}
+		$email_file->body_set($log_body);
+	}
+
+	# Create the email
+	my $email_subject = "Something went wrong with $RealScript on " .
+	                    hostname();
+	my $email = Email::MIME->create(
+		header_str => [
+			From    => 'noreply@stanford.edu',
+			To      => email_recipients($config),
+			Subject => $email_subject,
+		],
+		parts      => [ $email_body, $email_file ],
 	);
 	log_msg('Sending a ' . length($email->as_string) . '-byte email to ');
 	log_msg(email_recipients($config) . "\n");
@@ -1049,8 +1225,17 @@ sub deliver {
 	chown($homedir_uid, $homedir_gid, $destination);
 
 	# Now let's begin to deliver everything
+	# If delivery had a problem, send an email.
 	deliver_directory("$project_path/$project", $destination,
-	                  $homedir_uid, $homedir_gid);
+	                  $homedir_uid, $homedir_gid) or do {
+		email_delivery_problem($runfolder,
+		                       "$project_path/$project", $destination,
+		                       $email, $log);
+		return 1;
+	};
+
+	# Since delivery worked, send an email!
+	email_delivery_complete("$project_path/$project", $destination, $email);
 
 	# All done!
 	return 1;
