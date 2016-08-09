@@ -1100,7 +1100,8 @@ EOF
 		elsif (-d "$source/$item") {
 			mkdir($target, $mode);
 			chown($uid, $gid, $target);
-			my $res = deliver_directory("$source/$item", $target);
+			my $res = deliver_directory("$source/$item", $target,
+			                            $uid, $gid);
 			return $res unless $res == 1;
 		}
 
