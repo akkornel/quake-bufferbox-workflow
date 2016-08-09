@@ -9,9 +9,12 @@ use Sys::Hostname;
 
 
 # This is a support script, which is loaded by the various "bbox-workflow"
-# programs.
+# programs.  It is not meant to be executed directly.
 #
 # This support script has all of the email-related code.
+#
+# NOTE: This code relies heavily on log_* subroutines.  Those subroutines must
+# be loaded into the same scope as this code, or else things will fail.
 
 
 # check_email: Check (and create) the email configuration file.
@@ -574,5 +577,5 @@ EOF
 }
 
 
-# End on a true value, 
+# End on a true value.
 1;
