@@ -20,7 +20,7 @@ use Symbol qw(gensym);
 
 
 # A lot of our code is in support scripts, which are in the program directory.
-use lib qw($RealBin);
+use lib $RealBin;
 require 'bbox-delivery-code.pl';
 require 'bbox-email-code.pl';
 require 'bbox-log-lock-code.pl';
