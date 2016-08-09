@@ -8,6 +8,17 @@ use FindBin qw($RealBin $RealScript);
 use IPC::Open3;
 use Symbol qw(gensym);
 
+
+# This is bbox-workflow-miseq.  It is meant to automate the process of
+# running the bcl2fastq program, and delivering that program's output, when
+# a MiSeq instrument finishes its run.
+#
+# For more information, run `bbox-workflow-miseq help`.
+
+# This file is Copyright (C) 2016 The Board of Trustees of the Leland Stanford
+# Jr. University.  All rights reserved.
+
+
 # A lot of our code is in support scripts, which are in the program directory.
 use lib qw($RealBin);
 require 'bbox-delivery-code.pl';
