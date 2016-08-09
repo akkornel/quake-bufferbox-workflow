@@ -356,13 +356,13 @@ EOF
 			email_failure('Problems sending the post-analysis mail',
 			              'run', $RUNFOLDER,
 				      "$RealBin/email-recipients.txt", $LOGPATH,
-				      $LOG, $RealBin, $RealScript);
+				      \$LOG, $RealBin, $RealScript);
 		};
 	} else {
 		dolog("That's bad 8-(\n");
 		email_failure('The analysis program had an error',
 		              'run', $RUNFOLDER,
-		              "$RealBin/email-recipients.txt", $LOGPATH, $LOG,
+		              "$RealBin/email-recipients.txt", $LOGPATH, \$LOG,
 		              $RealBin, $RealScript);
 	}
 
