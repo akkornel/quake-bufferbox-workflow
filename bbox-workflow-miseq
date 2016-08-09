@@ -24,6 +24,7 @@ use lib qw($RealBin);
 require 'bbox-delivery-code.pl';
 require 'bbox-email-code.pl';
 require 'bbox-log-lock-code.pl';
+require 'bbox-misc-code.pl';
 
 
 # First, let's set our "constants".  These are settings that aren't likely to
@@ -500,62 +501,4 @@ exit 0;
 sub dolog {
 	my ($msg) = @_;
 	return log_msg($LOGHANDLE, \$LOG, $msg);
-}
-
-
-# Given a runfolder, return the path to the laneBarcode.html file
-sub barcode_path {
-	my ($runfolder) = @_;
-
-	# Start by appeding what we know about the path
-	my $html_path = "$runfolder/Data/Intensities/BaseCalls/Reports/html";
-
-	# Look in our html_path for a directory
-	my $html_handle;
-	my $html_dir;
-	opendir($html_handle, $html_path) or do {
-		dolog(<<"EOF");
-We have just run into problems trying to find the laneBarcode.html file
-The directory we tried to access is: $html_path
-The error we got is: $!
-EOF
-		return undef;
-	};
-	while (my $candidate = readdir($html_handle)) {
-		next unless -d "$html_path/$candidate";
-		$html_dir = "$html_path/$candidate";
-	}
-	closedir($html_handle);
-
-	# If we found our directory, then return the full path
-	if (defined($html_dir)) {
-		return "$html_dir/all/all/all/laneBarcode.html";
-	} else {
-		return undef;
-	}
-}
-
-# Make sure a path is valid
-sub validate_path {
-	my ($path) = @_;
-
-	if (   (-r $path)
-	    && (-x $path)
-	    && (-d $path)
-	) {
-		$path = Cwd::abs_path($path);
-		return $path;
-	} else {
-		return undef;
-	}
-}
-
-# Append .old to a directory
-sub directory_rename {
-	my ($path) = @_;
-	my $new_name = "$path.old";
-	if (-r $new_name) {
-		directory_rename($new_name);
-	}
-	rename($path, $new_name);
 }
