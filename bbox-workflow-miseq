@@ -333,8 +333,24 @@ EOF
 	my $output_handle = gensym();
 	my $analysis_buffer = '';
 	chdir($RUNFOLDER);
-	my $analysis_pid = open3($input_handle, $output_handle,
-	                         0, @RUNCOMMAND);
+	my $analysis_pid;
+	eval {
+		$analysis_pid = open3($input_handle, $output_handle,
+	                              0, @RUNCOMMAND);
+	};
+	if ($@) {
+		my $runcommand_string = join(' ', @RUNCOMMAND);
+		dolog(<<"EOF");
+There was a problem starting the analysis command.
+The command we tried to run was $runcommand_string
+The error we got was: $@
+EOF
+		email_failure('Problem starting the analysis command',
+			      'run', $RUNFOLDER,
+			      "$RealBin/email-recipients.txt", $LOGPATH,
+			      \$LOG, $RealBin, $RealScript);
+		exit(1);
+	}
 	close($input_handle);
 	while (read($output_handle, $analysis_buffer, 10)) {
 		dolog($analysis_buffer);
