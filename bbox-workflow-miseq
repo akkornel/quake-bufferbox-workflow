@@ -364,6 +364,88 @@ EOF
 	close($complete_handle);
 };
 
+
+$possible_actions{deliver} = sub {
+	# Get the run folder from the command line
+	# (Same as with the `run` action)
+	if (scalar(@ARGV) < 1) {
+		log_msg(<<"EOL");
+When using the `run` action, please provide the path to the run folder.
+For example: $RealScript run 160804-NS500126-0555-ABCDEFG
+EOL
+		exit 1;
+	}
+	my $candidate_runfolder = shift @ARGV;
+
+	# Make sure the run folder is valid, and also set $RUNFOLDER
+	# (Same as with the `run` action)
+	$RUNFOLDER = validate_path($candidate_runfolder);
+	if (!defined($RUNFOLDER)) {
+		log_msg(<<"EOL");
+The run folder you provided does not exist, is not a directory, or cannot be
+read.  Please re-run your command with a valid folder path.
+The path you provided is: $candidate_runfolder
+EOL
+		exit 1;
+	}
+
+	# Let's also set $SEARCHFOLDER, $LOGPATH, and $LOCKPATH
+	# (Same as with the `run` action)
+	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
+	$LOGPATH = "$RUNFOLDER/workflow-log.txt";
+	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
+
+	# Get a lock on our run folder
+	# (Same as with the `run` action)
+	lock_get() or exit(1);
+
+	# Start logging to file
+	# (Same as with the `run` action)
+	log_open() or exit(1);
+
+	# Search for Project_ directories
+	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
+	my $basecalls_handle;
+	my @candidate_projects;
+	log_msg("Searching for Project directories...\n");
+	opendir($basecalls_handle, $basecalls_path) or do {
+		log_msg(<<"EOF");
+We had a problem accessing the BaseCalls directory.
+The path we tried to access is: $basecalls_path
+The error we got is: $!
+EOF
+		exit(1);
+	};
+	while (my $project_name = readdir($basecalls_handle)) {
+		if ($project_name !~ m{\AProject_[a-z0-9]+\z}xims) {
+			log_msg("$project_name doesn't look like a Project.  ");
+			log_msg("Skipping...\n");
+		}
+
+		log_msg("Found Project directory $project_name\n");
+		push @candidate_projects, $project_name;
+	}
+
+	# Exit if we don't find any Project directories
+	if (!scalar(@candidate_projects)) {
+		log_msg(<<"EOF");
+We could not find any Project directories.
+The run folder we were searching is: $RUNFOLDER
+Please make sure that an analysis was completed, and try your command again.
+EOF
+		return;
+	}
+
+	# Now, perform the delivery on each candidate project
+	foreach my $project (@candidate_projects) {
+		deliver($SEARCHFOLDER, $RUNFOLDER, $project,
+		        "$RealBin/email-recipients.txt", $LOGPATH);
+	}
+
+	log_msg("Delivery complete!\n");
+	return;
+};
+
 # Now that we have our actions, let's execute the code
 if (exists($possible_actions{$ACTION})) {
 	# We are getting a subroutine reference from a Perl hash, dereferencing
@@ -837,6 +919,41 @@ EOF
 # Other Subroutines Go Here
 # 
 
+
+# Deliver files for a given project
+# $runfolder The path to the run folder.
+# $project: The name of the Project path.
+# $email: The email-recipients.txt config file.
+# $log: The path to the log file
+sub deliver {
+	my ($runfolder, $project, $email, $log) = @_;
+	log_msg("Starting delivery for $project\n");
+
+	# Extract the username
+	$project =~ m{\AProject_(.+)\z}xims;
+	my $username = $1;
+
+	# Search for any home directories matching this username
+	# We have a hard-coded exceptin for user "spyros"
+	my @homedirs;
+	if ($username eq 'spyros') {
+		@homedirs = ('/b7_1/home/spyros');
+	} else {
+		@homedirs = glob "/b?_?/home*/$username";
+	}
+
+	# If we don't find anything, send an email and return
+	if (!scalar(@homedirs)) {
+		log_msg("No home directory found for $username!\n");
+		return 1;
+	}
+
+	# Now, let's get to work
+	log_msg("Will do delivery to user $username\n");
+
+	# All done!
+	return 1;
+}
 
 # Given a runfolder, return the path to the laneBarcode.html file
 sub barcode_path {
