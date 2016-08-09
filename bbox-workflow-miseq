@@ -1041,7 +1041,7 @@ sub deliver {
 		}
 	}
 	my $destination = "$homedir/$runfolder_name$runfolder_suffix";
-	log_msg("Will deliver files to $destination");
+	log_msg("Will deliver files to $destination\n");
 
 	# Create the directory to hold everything
 	mkdir($destination, $homedir_mode);
