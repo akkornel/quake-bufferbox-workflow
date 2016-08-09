@@ -1021,7 +1021,7 @@ sub deliver {
 	# Start by getting the user's UID and GID.
 	log_msg("Will do delivery to user $username\n");
 	my @homedir_stat = stat($homedir);
-	my $homedir_mode = $homedir_stat[3] & 07777;
+	my $homedir_mode = $homedir_stat[2] & 07777;
 	my $homedir_uid = $homedir_stat[4];
 	my $homedir_gid = $homedir_stat[5];
 
