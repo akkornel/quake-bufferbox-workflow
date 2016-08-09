@@ -420,6 +420,7 @@ EOF
 		if ($project_name !~ m{\AProject_[a-z0-9]+\z}xims) {
 			log_msg("$project_name doesn't look like a Project.  ");
 			log_msg("Skipping...\n");
+			next;
 		}
 
 		log_msg("Found Project directory $project_name\n");
@@ -438,7 +439,7 @@ EOF
 
 	# Now, perform the delivery on each candidate project
 	foreach my $project (@candidate_projects) {
-		deliver($SEARCHFOLDER, $RUNFOLDER, $project,
+		deliver($RUNFOLDER, $project,
 		        "$RealBin/email-recipients.txt", $LOGPATH);
 	}
 
