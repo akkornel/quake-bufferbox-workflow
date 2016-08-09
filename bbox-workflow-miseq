@@ -413,12 +413,12 @@ EOL
 	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
 
 	# Get a lock on our run folder
-	# (Same as with the `run` action)
-	lock_get() or exit(1);
+	$LOCKHANDLE = lock_get($LOCKPATH, $LOGPATH);
+	exit(1) unless $LOCKHANDLE;
 
 	# Start logging to file
-	# (Same as with the `run` action)
-	log_open() or exit(1);
+	$LOGHANDLE = log_open($LOGPATH, \$LOG);
+	exit(1) unless $LOGHANDLE;
 
 	# Search for Project_ directories
 	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
