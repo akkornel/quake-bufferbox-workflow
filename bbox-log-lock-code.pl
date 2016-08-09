@@ -145,7 +145,7 @@ EOL
 	truncate($lock_handle, 0);
 	print $lock_handle "$$\n";
 	dolog("Lock file $lock_path locked.\n");
-	return 1;
+	return $lock_handle;
 }
 
 # lock_release: Release our lock.
