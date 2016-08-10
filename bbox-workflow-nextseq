@@ -324,7 +324,7 @@ EOL
 
 	# Parse RunCompletionStatus.xml for "CompletedAsPlanned"
 	my $runcompletion_handle;
-	dolog("Waiting for RunCompletionStatus.xml to appear with agood value...\n");
+	dolog("Waiting for RunCompletionStatus.xml to appear with a good value...\n");
 	open($runcompletion_handle, '<', "$RUNFOLDER/RunCompletionStatus.xml") or do {
 		dolog(<<"EOF");
 We got an error when trying to open RunCompletionStatus.xml.
