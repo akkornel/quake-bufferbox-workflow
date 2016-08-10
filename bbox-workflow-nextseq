@@ -1,0 +1,626 @@
+#!/usr/bin/perl -w
+
+use strict;
+use warnings;
+
+use Cwd;
+use FindBin qw($RealBin $RealScript);
+use IPC::Open3;
+use Symbol qw(gensym);
+
+
+# This is bbox-workflow-nextseq.  It is meant to automate the process of
+# running the bcl2fastq program, and delivering that program's output, when
+# a NextSeq instrument finishes its run.
+#
+# For more information, run `bbox-workflow-nextseq help`.
+
+# This file is Copyright (C) 2016 The Board of Trustees of the Leland Stanford
+# Jr. University.  All rights reserved.
+
+
+# A lot of our code is in support scripts, which are in the program directory.
+use lib $RealBin;
+require 'bbox-delivery-code.pl';
+require 'bbox-email-code.pl';
+require 'bbox-log-lock-code.pl';
+require 'bbox-misc-code.pl';
+
+
+# First, let's set our "constants".  These are settings that aren't likely to
+# change much (that's why they're in code, not in a config file).
+
+# $TIMEOUT1 is how long we should wait, in minutes, for an "RTAComplete.txt"
+# file to appear.
+# We set this to 2 days.
+# 2 (days) * 24 (hours) * 60 (minutes)
+my $TIMEOUT1 = 2880;
+
+# $TIMEOUT2 is how long we should wait, in minutes, for the
+# "RunCompletionStatus.xml" file to appear.
+# We set this to 2 hours
+# 2 (hours) * 60 (minutes)
+my $TIMEOUT2 = 120;
+
+# $RUNCOMMAND is the command we will run.
+my @RUNCOMMAND = (qw(
+/usr/local/bin/bcl2fastq -l WARNING -o Data/Intensities/BaseCalls -p 9 -d 2 --no-lane-splitting
+));
+
+# $DRIVECOMMAND is the path to the drive command
+my $DRIVECOMMAND = '/home/bufferbox/gopath/bin/drive';
+
+# Next, let's make a big list of global variables.  These all initially start
+# out as undefined, and are filled in as we go along.
+
+# $SEARCHFOLDER is the path to the directory that we look in when we are doing a
+# "scan" operation.  In other words, $SEARCHDIR is where all the run folders
+# live.
+my $SEARCHFOLDER = undef;
+
+# $RUNFOLDER is the path to the run folder.  Initially it contains the output
+# from the instrument (the instrument copies it directly), and later on it
+# will contain output from the analysis program, plus our logs.
+my $RUNFOLDER = undef;
+
+# $LIBRARYID is a parameter set when the run is started.  We use it to look up
+# the samplesheet.
+my $LIBRARYID = undef;
+
+# $LOCKPATH is the path to the "workflow-lock.txt" file.  This file should
+# only exist while a copy of bbox-workflow is running.
+my $LOCKPATH = undef;
+
+# $LOCKHANDLE is a File Handle pointing to $LOCKPATH
+my $LOCKHANDLE = undef;
+
+# $LOGPATH is the path to the "workflow-log.txt" file.
+my $LOGPATH = undef;
+
+# $LOGHANDLE is a File Handle pointing to $LOGPATH
+my $LOGHANDLE = undef;
+
+# $LOG contains messages that we haven't written to a log file yet.
+# This is only useful when $LOGPATH is undefined.
+my $LOG = "";
+
+# $ACTION is what we are going to do.  It can be "scan", "run", or "deliver".
+my $ACTION = undef;
+
+
+# Now, let's do stuff!
+# First, let's see if we have our email recipients file
+
+
+check_email("$RealBin/email-recipients.txt");
+
+
+# Next, we're going to find out what our action is
+
+
+# We should have at least one argument from the command line
+if (scalar(@ARGV) < 1) {
+	dolog(<<"EOL");
+Please specify an action to perform, like 'scan' or 'run'.
+For example: $RealScript scan NextSeq
+Or: $RealScript run NextSeq/160804-NS500126-123-BDGEJMGM
+Or you can just say `$RealScript help` !
+EOL
+	exit 1;
+}
+
+
+# First, we need to see what action we're going to perform.
+# Let's also set up code to run for each action.
+$ACTION = shift @ARGV;
+my %possible_actions;
+
+
+$possible_actions{help} = sub {
+	print <<"EOF";
+The $0 command can be run in four different ways:
+
+$0 help              <-- This is what you're doing now
+$0 scan DIRECTORY    <-- Scan a directory for new run folders
+$0 run RUNFOLDER     <-- Run (or re-run) the analysis on a given run folder
+$0 deliver RUNFOLDER <-- Deliver results from a completed run folder.
+
+The "scan" action is used to watch a directory for new run folders.  When a
+run folder is found, it is checked to see if the workflow process has already
+run on it (by looking for a "workflow-complete.txt" file) or if the workflow
+process is running on it right now (by looking for a "workflow-lock.txt" file).
+If a new run folder is found, then the "run" action is begun on it.  This
+process continues until all run folders have been examined, and then the
+workflow program exits.
+
+The "scan" action is meant to be run automatically, for example every 15
+minutes.
+
+The "run" action is used to run, or re-run, the analysis on a specific run
+folder.  This is used in three cases:
+
+1: When the "scan" action is not being used.
+2: When a previous run failed.
+3: When a previous run completed, but something needs to be changed.
+
+The "run" action will not run on a run folder that is already in use, but it
+_will_ run on run folders that have already been processed.  When run on an
+already-processed rundir, existing analysis results (the "Project_" directories)
+will be renamed (by appending ".old" to them).  Old logs will also be kept
+(again, by appending ".old" to them).
+
+The "deliver" action is used to deliver the analysis results to a user, by
+copying them to the user's home directory.
+
+The "deliver" action must be run as root, because it requires access to
+other user's home directories.
+
+Emails are sent in the following cases:
+
+* When an analysis fails, or there is some other problem with a run folder.
+* When an analysis completes successfully.
+* When a delivery is completed.
+* When a delivery cannot be completed, because a home directory is missing.
+
+Emails are sent to the addresses listed in $RealBin/email-recipients.txt
+
+If you have any more questions, please email
+research-computing-support\@stanford.edu !
+EOF
+};
+
+$possible_actions{scan} = sub {
+	# Get the search directory from the command line
+	if (scalar(@ARGV) < 1) {
+		dolog(<<"EOL");
+When using the `scan` action, please provide the path to a directory to search.
+For example: $RealScript scan NextSeq
+EOL
+		exit 1;
+	}
+	my $candidate_searchfolder = shift @ARGV;
+
+	# Make sure the search folder is valid, and also set $SEARCHFOLDER
+	$SEARCHFOLDER = validate_path($candidate_searchfolder);
+	if (!defined($SEARCHFOLDER)) {
+		dolog(<<"EOL");
+The search folder you provided does not exist, is not a directory, or cannot
+be read.  Please re-run your command with a valid folder path.
+The path your provided is: $candidate_searchfolder
+EOL
+		exit 1;
+	}
+	dolog("Searching $SEARCHFOLDER for candidate runfolders...\n");
+
+	# Open the search folder, and start looking at what's inside
+	my $searchfolder_handle;
+	opendir($searchfolder_handle, $SEARCHFOLDER) or do {
+		dolog(<<"EOL");
+We just got an error when trying to open a directory.
+The directory we tried accessing is: $SEARCHFOLDER
+The error message we received is: $!
+EOL
+		exit 1;
+	};
+	while (my $candidate_runfolder = readdir($searchfolder_handle)) {
+		dolog("Found candidate $candidate_runfolder\n");
+
+		# Skip dot files
+		if ($candidate_runfolder =~ m{\A[.]}xims) {
+			dolog("... Skipping dotfile.\n");
+			next;
+		}
+
+		# Skip non-directories
+		if (! -d "$SEARCHFOLDER/$candidate_runfolder") {
+			dolog("... Skipping.  Not a directory.\n");
+			next;
+		}
+
+		# Skip if we have a workflow-complete.txt file
+		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-complete.txt") {
+			dolog("... workflow-complete.txt found.  Skipping.\n");
+			next;
+		}
+		
+		# Skip if we have a workflow-lock.txt file
+		if (-r "$SEARCHFOLDER/$candidate_runfolder/workflow-lock.txt") {
+			dolog("... workflow-lock.txt found.  Skipping.\n");
+			next;
+		}
+
+		# We have a candidate!  Run against it, and exit
+		dolog("Time to run!\n");
+		closedir($searchfolder_handle);
+		unshift @ARGV, "$SEARCHFOLDER/$candidate_runfolder";
+		&{$possible_actions{run}}();
+		return 1;
+	}
+
+	# If we hit this point, we didn't find anything, so exit
+	dolog("No viable candidates found.  Exiting.\n");
+	closedir($searchfolder_handle);
+	return 1;
+};
+
+$possible_actions{run} = sub {
+	# Get the run folder from the command line
+	if (scalar(@ARGV) < 1) {
+		dolog(<<"EOL");
+When using the `run` action, please provide the path to the run folder.
+For example: $RealScript run 160804-NS500126-0555-ABCDEFG
+EOL
+		exit 1;
+	}
+	my $candidate_runfolder = shift @ARGV;
+
+	# Make sure the run folder is valid, and also set $RUNFOLDER
+	$RUNFOLDER = validate_path($candidate_runfolder);
+	if (!defined($RUNFOLDER)) {
+		dolog(<<"EOL");
+The run folder you provided does not exist, is not a directory, or cannot be
+read.  Please re-run your command with a valid folder path.
+The path you provided is: $candidate_runfolder
+EOL
+		exit 1;
+	}
+
+	# Let's also set $SEARCHFOLDER, $LOGPATH, and $LOCKPATH
+	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
+	$LOGPATH = "$RUNFOLDER/workflow-log.txt";
+	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
+
+	# Get a lock on our run folder
+	$LOCKHANDLE = lock_get($LOCKPATH, $LOGPATH);
+	exit(1) unless $LOCKHANDLE;
+
+	# Start logging to file
+	$LOGHANDLE = log_open($LOGPATH, \$LOG);
+	exit(1) unless $LOGHANDLE;
+
+	# Wait for RTAComplete.txt to appear
+	dolog("Waiting for $RUNFOLDER/RTAComplete.txt to appear...\n");
+	while ($TIMEOUT1 > 0) {
+		# If the file exists, then stop the loop
+		if (-r "$RUNFOLDER/RTAComplete.txt") {
+			dolog("File found!\n");
+			last;
+		}
+
+		# If the file doesn't exist yet, wait a minute and try again
+		$TIMEOUT1--;
+		sleep(60);
+	}
+	# If we timed out, then exit.
+	if ($TIMEOUT2 == 0) {
+		dolog("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
+		log_failure("Gave up waiting for RTAComplete.txt to appear",
+		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
+		            $LOGPATH, $LOG);
+		return;
+	}
+
+	# Wait for RunCompletionStatus.xml to appear
+	dolog("Waiting for $RUNFOLDER/RunCompletionStatus.xml to appear...\n");
+	while ($TIMEOUT2 > 0) {
+		# If the file exists, then stop the loop
+		if (-r "$RUNFOLDER/RunCompletionStatus.xml") {
+			dolog("File found!\n");
+			last;
+		}
+
+		# If the file doesn't exist yet, wait a minute and try again
+		$TIMEOUT2--;
+		sleep(60);
+	}
+	# If we timed out, then exit.
+	if ($TIMEOUT2 == 0) {
+		dolog("Gave up waiting for $RUNFOLDER/RunCompletionStatus.xml\n");
+		log_failure("Gave up waiting for RunCompletionStatus.xml to appear",
+		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
+		            $LOGPATH, $LOG);
+		return;
+	}
+
+	# Parse RunCompletionStatus.xml for "CompletedAsPlanned"
+	my $runcompletion_handle;
+	dolog("Waiting for RunCompletionStatus.xml to appear with agood value...\n");
+	open($runcompletion_handle, '<', "$RUNFOLDER/RunCompletionStatus.xml") or do {
+		dolog(<<"EOF");
+We got an error when trying to open RunCompletionStatus.xml.
+The full path we tried to open is: $RUNFOLDER/RunCompletionStatus.xml
+The error we got is: $!
+EOF
+		log_failure("Could not open RunCompletionStatus.xml", 'run',
+			    $RUNFOLDER, "$RealBin/email-recipients.txt",
+			    $LOGPATH, $LOG);
+		return;
+	};
+	while (my $line = <$runcompletion_handle>) {
+		# Skip all XML, except for the CompletionStatus tag
+		next unless $line =~ m{
+		\A\s+
+		<CompletionStatus>(.+)</CompletionStatus>\s*
+		\z
+		}xims;
+
+		# Throw an error if the status is not "CompletedAsPlanned"
+		if ($1 ne 'CompletedAsPlanned') {
+			dolog(<<"EOF");
+We have a completed run, but the CompletionStatus is not "CompletedAsPlanned".
+The completion status we found is: $1
+EOF
+			log_failure("Un-good CompletionStatus", 'run',
+				    $RUNFOLDER, "$RealBin/email-recipients.txt",
+				    $LOGPATH, $LOG);
+			return;
+		}
+	}
+	close($runcompletion_handle);
+	dolog("File found!\n");
+
+	# Parse RunParameters.xml to get the LibraryID
+	my $runparameters_handle;
+	dolog("Searching RunParameters.xml for a LibraryID\n");
+	open($runparameters_handle, '<', "$RUNFOLDER/RunParameters.xml") or do {
+		dolog(<<"EOF");
+We got an error when trying to open RunParameters.xml.
+The full path we tried to open is: $RUNFOLDER/RunParameters.xml
+The error we got is: $!
+EOF
+		log_failure("Could not open RunParameters.xml", 'run',
+			    $RUNFOLDER, "$RealBin/email-recipients.txt",
+			    $LOGPATH, $LOG);
+		return;
+	};
+	while (my $line = <$runparameters_handle>) {
+		# Skip all XML, except for the LibraryID tag
+		next unless $line =~ m{
+		\A\s+
+		<LibraryID>(.+)</LibraryID>\s*
+		\z
+		}xims;
+		$LIBRARYID = $1;
+		dolog("Found LibraryID $LIBRARYID\n");
+	}
+	if (!defined($LIBRARYID)) {
+		dolog(<<"EOF");
+We were unable to find a LibraryID inside RunParameters.xml.
+EOF
+		log_failure("Could not find a LibraryID",
+			    'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
+			    $LOGPATH, $LOG);
+		return;
+	}
+
+	# Check to see if we have any Project directories
+	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
+	my $basecalls_handle;
+	opendir($basecalls_handle, $basecalls_path) or do {
+		dolog(<<"EOF");
+The BaseCalls directory does not exist, is not a directory, or cannot be read.
+Please make sure you are running this command with a valid run folder!
+The directory we are trying to open is: $basecalls_path
+The error we are getting is: $!
+EOF
+		return;
+	};
+	while (readdir($basecalls_handle)) {
+		# Find any directories whose name starts with "Project_"
+		next unless $_ =~ m{\A        # Start of string
+		                    (         # Start capturing match
+		                    Project_  # "Project_"
+		                    [a-z0-9]+ # One or more letters/numbers
+		                    )         # End capture
+		                    \z        # End of string
+		                   }xims;
+
+		# Rename the directory (this might recurse)
+		dolog(<<"EOF");
+We found an existing Project directory: $1.
+We are renaming this to $1.old.
+(If that directory already exists, we'll add another ".old" to that one,
+and so on, and so on, and ....)
+EOF
+		my $old_project_path = "$basecalls_path/$1";
+		directory_rename($old_project_path);
+	}
+
+	# Get ready to run the analysis command
+	dolog("Running the analysis!\n");
+	dolog("Analysis command: " . join(' ', @RUNCOMMAND) . "\n");
+	dolog("Analysys command output:\n");
+	dolog("==========================================================\n");
+
+	# Actually run the analysis command.
+	# We send all output to the log directly.  We also make a file handle
+	# for input, but then we immediately close it (we don't need it).
+	my $input_handle;
+	my $output_handle = gensym();
+	my $analysis_buffer = '';
+	chdir($RUNFOLDER);
+	my $analysis_pid;
+	eval {
+		$analysis_pid = open3($input_handle, $output_handle,
+	                              0, @RUNCOMMAND);
+	};
+	if ($@) {
+		my $runcommand_string = join(' ', @RUNCOMMAND);
+		dolog(<<"EOF");
+There was a problem starting the analysis command.
+The command we tried to run was $runcommand_string
+The error we got was: $@
+EOF
+		email_failure('Problem starting the analysis command',
+			      'run', $RUNFOLDER,
+			      "$RealBin/email-recipients.txt", $LOGPATH,
+			      \$LOG, $RealBin, $RealScript);
+		exit(1);
+	}
+	close($input_handle);
+	while (read($output_handle, $analysis_buffer, 10)) {
+		dolog($analysis_buffer);
+		$analysis_buffer = '';
+	}
+	waitpid($analysis_pid, 0);
+	close($output_handle);
+
+	# Clean up from the analysis command
+	my $analysis_exit_code = $? >> 8;
+	dolog("==========================================================\n");
+	dolog("The analysis program returned exit code $analysis_exit_code\n");
+
+	# Send an email regarding the analysis
+	if ($analysis_exit_code == 0) {
+		dolog("That's good! 8-)\n");
+		email_analysis($RUNFOLDER, "$RealBin/email-recipients.txt",
+		               $LOGPATH, $RealBin, $RealScript) or do {
+			email_failure('Problems sending the post-analysis mail',
+			              'run', $RUNFOLDER,
+				      "$RealBin/email-recipients.txt", $LOGPATH,
+				      \$LOG, $RealBin, $RealScript);
+		};
+	} else {
+		dolog("That's bad 8-(\n");
+		email_failure('The analysis program had an error',
+		              'run', $RUNFOLDER,
+		              "$RealBin/email-recipients.txt", $LOGPATH, \$LOG,
+		              $RealBin, $RealScript);
+	}
+
+	dolog("Creating workflow-complete.txt marker file\n");
+	my $complete_path = "$RUNFOLDER/workflow-complete.txt";
+	my $complete_handle;
+	open($complete_handle, '>', $complete_path) or do {
+		dolog(<<"EOF");
+Unable to open the workflow-complete.txt file for writing!
+Tried to open this file: $complete_path
+Here is the error we received: $!
+EOF
+		return;
+	};
+	print $complete_handle 'Workflow completed at ', localtime(time()), "\n";
+	close($complete_handle);
+};
+
+
+$possible_actions{deliver} = sub {
+	# Get the run folder from the command line
+	# (Same as with the `run` action)
+	if (scalar(@ARGV) < 1) {
+		dolog(<<"EOL");
+When using the `run` action, please provide the path to the run folder.
+For example: $RealScript run 160804-NS500126-0555-ABCDEFG
+EOL
+		exit 1;
+	}
+	my $candidate_runfolder = shift @ARGV;
+
+	# Make sure the run folder is valid, and also set $RUNFOLDER
+	# (Same as with the `run` action)
+	$RUNFOLDER = validate_path($candidate_runfolder);
+	if (!defined($RUNFOLDER)) {
+		dolog(<<"EOL");
+The run folder you provided does not exist, is not a directory, or cannot be
+read.  Please re-run your command with a valid folder path.
+The path you provided is: $candidate_runfolder
+EOL
+		exit 1;
+	}
+
+	# Let's also set $SEARCHFOLDER, $LOGPATH, and $LOCKPATH
+	# (Same as with the `run` action)
+	$SEARCHFOLDER = Cwd::abs_path("$RUNFOLDER/../..");
+	$LOGPATH = "$RUNFOLDER/workflow-log.txt";
+	$LOCKPATH = "$RUNFOLDER/workflow-lock.txt";
+
+	# Get a lock on our run folder
+	$LOCKHANDLE = lock_get($LOCKPATH, $LOGPATH);
+	exit(1) unless $LOCKHANDLE;
+
+	# Start logging to file
+	$LOGHANDLE = log_open($LOGPATH, \$LOG);
+	exit(1) unless $LOGHANDLE;
+
+	# Search for Project_ directories
+	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
+	my $basecalls_handle;
+	my @candidate_projects;
+	dolog("Searching for Project directories...\n");
+	opendir($basecalls_handle, $basecalls_path) or do {
+		dolog(<<"EOF");
+We had a problem accessing the BaseCalls directory.
+The path we tried to access is: $basecalls_path
+The error we got is: $!
+EOF
+		exit(1);
+	};
+	while (my $project_name = readdir($basecalls_handle)) {
+		if ($project_name !~ m{\AProject_[a-z0-9]+\z}xims) {
+			dolog("$project_name doesn't look like a Project.  ");
+			dolog("Skipping...\n");
+			next;
+		}
+
+		dolog("Found Project directory $project_name\n");
+		push @candidate_projects, $project_name;
+	}
+
+	# Exit if we don't find any Project directories
+	if (!scalar(@candidate_projects)) {
+		dolog(<<"EOF");
+We could not find any Project directories.
+The run folder we were searching is: $RUNFOLDER
+Please make sure that an analysis was completed, and try your command again.
+EOF
+		return;
+	}
+
+	# Now, perform the delivery on each candidate project
+	foreach my $project (@candidate_projects) {
+		deliver($RUNFOLDER, $project,
+		        "$RealBin/email-recipients.txt", $LOGPATH, $RealBin,
+			$RealScript);
+	}
+
+	dolog("Delivery complete!\n");
+	return;
+};
+
+# Now that we have our actions, let's execute the code
+if (exists($possible_actions{$ACTION})) {
+	# We are getting a subroutine reference from a Perl hash, dereferencing
+	# it, and calling it.
+	&{$possible_actions{$ACTION}};
+}
+else {
+	dolog(<<"EOL");
+The action you specified, $ACTION, is not a known action.
+You have three possible actions:
+* scan: Scan a given directory for unprocessed work folders.
+* run: Process (or re-process) a given work folder.
+* deliver: Deliver the analysis results from a given work folder.
+EOL
+}
+
+# That's it!  Let's exit
+log_close($LOGHANDLE);
+undef $LOGHANDLE;
+lock_release($LOCKPATH, $LOCKHANDLE);
+undef $LOCKPATH;
+undef $LOCKHANDLE;
+exit 0;
+
+
+#
+# Other Subroutines Go Here
+# 
+
+# dolog: This is a convenience subroutine to log something.  The logging code
+# needs a handle and scalar ref passed in, which would be annoying if needed on
+# every call.
+# $msg: The message to log.
+sub dolog {
+	my ($msg) = @_;
+	return log_msg($LOGHANDLE, \$LOG, $msg);
+}
