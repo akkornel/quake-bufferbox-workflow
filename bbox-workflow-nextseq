@@ -433,7 +433,9 @@ EOF
 
 	# Find our samplesheet
 	dolog("Drive running complete!  Checking for samplesheet.\n");
-	my @samplesheets = glob "$DRIVEPATH/$LIBRARYID SampleSheet*.csv";
+	my $samplesheet_search_path = "$DRIVEPATH/$LIBRARYID SampleSheet*.csv";
+	$samplesheet_search_path =~ s{[ ]}{\ }xims;
+	my @samplesheets = glob $samplesheet_search_path;
 	dolog('Found ' . scalar(@samplesheets) . " candidate(s).\n");
 
 	# Pick exactly which samplesheet to use
