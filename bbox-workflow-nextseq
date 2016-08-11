@@ -294,9 +294,10 @@ EOL
 	# If we timed out, then exit.
 	if ($TIMEOUT2 == 0) {
 		dolog("Gave up waiting for $RUNFOLDER/RTAComplete.txt\n");
-		log_failure("Gave up waiting for RTAComplete.txt to appear",
-		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
-		            $LOGPATH, $LOG);
+		email_failure("Gave up waiting for RTAComplete.txt to appear",
+		              'run', $RUNFOLDER,
+		              "$RealBin/email-recipients.txt", $LOGPATH, \$LOG,
+		              $RealBin, $RealScript);
 		return;
 	}
 
@@ -316,9 +317,10 @@ EOL
 	# If we timed out, then exit.
 	if ($TIMEOUT2 == 0) {
 		dolog("Gave up waiting for $RUNFOLDER/RunCompletionStatus.xml\n");
-		log_failure("Gave up waiting for RunCompletionStatus.xml to appear",
-		            'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
-		            $LOGPATH, $LOG);
+		email_failure("Gave up waiting for RunCompletionStatus.xml",
+		              'run', $RUNFOLDER,
+		              "$RealBin/email-recipients.txt", $LOGPATH, \$LOG,
+		              $RealBin, $RealScript);
 		return;
 	}
 
@@ -331,9 +333,9 @@ We got an error when trying to open RunCompletionStatus.xml.
 The full path we tried to open is: $RUNFOLDER/RunCompletionStatus.xml
 The error we got is: $!
 EOF
-		log_failure("Could not open RunCompletionStatus.xml", 'run',
-			    $RUNFOLDER, "$RealBin/email-recipients.txt",
-			    $LOGPATH, $LOG);
+		email_failure("Could not open RunCompletionStatus.xml", 'run',
+			      $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
 		return;
 	};
 	while (my $line = <$runcompletion_handle>) {
@@ -350,9 +352,10 @@ EOF
 We have a completed run, but the CompletionStatus is not "CompletedAsPlanned".
 The completion status we found is: $1
 EOF
-			log_failure("Un-good CompletionStatus", 'run',
-				    $RUNFOLDER, "$RealBin/email-recipients.txt",
-				    $LOGPATH, $LOG);
+			email_failure("Un-good CompletionStatus", 'run',
+				      $RUNFOLDER, 
+				      "$RealBin/email-recipients.txt", $LOGPATH,
+				      \$LOG, $RealBin, $RealScript);
 			return;
 		}
 	}
@@ -368,9 +371,9 @@ We got an error when trying to open RunParameters.xml.
 The full path we tried to open is: $RUNFOLDER/RunParameters.xml
 The error we got is: $!
 EOF
-		log_failure("Could not open RunParameters.xml", 'run',
-			    $RUNFOLDER, "$RealBin/email-recipients.txt",
-			    $LOGPATH, $LOG);
+		email_failure("Could not open RunParameters.xml", 'run',
+			      $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
 		return;
 	};
 	while (my $line = <$runparameters_handle>) {
