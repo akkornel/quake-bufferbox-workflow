@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Cwd;
+use File::Copy;
 use FindBin qw($RealBin $RealScript);
 use IPC::Open3;
 use Symbol qw(gensym);
@@ -49,6 +50,9 @@ my @RUNCOMMAND = (qw(
 
 # $DRIVECOMMAND is the path to the drive command
 my $DRIVECOMMAND = '/home/bufferbox/gopath/bin/drive';
+
+# $DRIVEPATH is the path to the drive folder containing samplesheets
+my $DRIVEPATH = '/home/bufferbox/gdrive/NS Samplesheets';
 
 # Next, let's make a big list of global variables.  These all initially start
 # out as undefined, and are filled in as we go along.
@@ -390,11 +394,96 @@ EOF
 		dolog(<<"EOF");
 We were unable to find a LibraryID inside RunParameters.xml.
 EOF
-		log_failure("Could not find a LibraryID",
-			    'run', $RUNFOLDER, "$RealBin/email-recipients.txt",
-			    $LOGPATH, $LOG);
+		email_failure("Could not find a LibraryID",
+			      'run', $RUNFOLDER,
+			      "$RealBin/email-recipients.txt", $LOGPATH, \$LOG,
+		              $RealBin, $RealScript);
 		return;
 	}
+
+	# Go into the drive folder
+	dolog("Checking gdrive folder\n");
+	chdir($DRIVEPATH) or do {
+		dolog(<<"EOF");
+Unable to access the Google Drive folder containing the samplesheets.
+The folder we are trying to access is: $DRIVEPATH
+EOF
+		email_failure("Could not access gdrive folder", 'run',		                              $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
+		return;
+	};
+
+	# Run our first drive pull
+	my $drive_exit_code;
+	dolog("Running drive pull\n");
+	$drive_exit_code = drive_run($DRIVECOMMAND, 'pull', '-no-prompt',
+		                     '-verbose', '.');
+	return unless defined($drive_exit_code);
+
+	# If we got return code 13, then we need to fix clashes and re-pull
+	while ($drive_exit_code == 13) {
+		$drive_exit_code = drive_run($DRIVECOMMAND, 'pull',
+			                     '-no-prompt', '-verbose',
+					     '-fix-clashes');
+		return unless defined($drive_exit_code);
+		$drive_exit_code = drive_run($DRIVECOMMAND, 'pull',
+			                     '-no-prompt', '-verbose', '.');
+		return unless defined($drive_exit_code);
+	}
+
+	# Find our samplesheet
+	dolog("Drive running complete!  Checking for samplesheet.\n");
+	my @samplesheets = glob "$DRIVEPATH/$LIBRARYID SampleSheet*.csv";
+	dolog('Found ' . scalar(@samplesheets) . " candidate(s).\n");
+
+	# Pick exactly which samplesheet to use
+	my $samplesheet_path;
+	if (scalar(@samplesheets) == 0) {
+		dolog("No samplesheets found!\n");
+		email_failure("No samplesheets found for $LIBRARYID", 'run',
+			      $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
+		return;
+	} elsif (scalar(@samplesheets) == 1) {
+		$samplesheet_path = $samplesheets[0];
+	} else {
+		# Get the last-modified time for each samplesheet
+		my %samplesheet_dates;
+		foreach my $samplesheet (@samplesheets) {
+			my $mtime = (stat($samplesheet))[9];
+			dolog("Samplesheet $samplesheet last modified $mtime\n.");
+			$samplesheet_dates{$samplesheet} = $mtime;
+		}
+
+		# Sort the samplesheets, and get the newest
+		my @sorted_samplesheets = sort {
+			$samplesheet_dates{$a} <=> $samplesheet_dates{$b};
+		} keys(%samplesheet_dates);
+		$samplesheet_path = pop @sorted_samplesheets;
+	}
+	dolog("Using samplesheet at path $samplesheet_path\n");
+
+	# Copy the SampleSheet into place
+	if (-r "$RUNFOLDER/SampleSheet.csv") {
+		dolog(<<"EOF");
+We found an existing SampleSheet.csv.
+We are renaming this to SampleSheet.csv.old.
+(If that file exists, we'll add another ".old" to that one, and so on, and ....)
+EOF
+		directory_rename("$RUNFOLDER/SampleSheet.csv");
+	}
+	File::Copy::copy($samplesheet_path, "$RUNFOLDER/SampleSheet.csv") or do {
+		dolog(<<"EOF");
+We were unable to copy the SampleSheet, because of an error.
+The file we tried to copy is: $samplesheet_path
+The destination was: $RUNFOLDER/SampleSheet.csv
+The error is: $!
+EOF
+		email_failure('Unable to copy SampleSheet.csv into place', 'run',
+			      $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
+	};
+	dolog("Samplesheet copied\n");
 
 	# Check to see if we have any Project directories
 	my $basecalls_path = "$RUNFOLDER/Data/Intensities/BaseCalls";
@@ -626,4 +715,50 @@ exit 0;
 sub dolog {
 	my ($msg) = @_;
 	return log_msg($LOGHANDLE, \$LOG, $msg);
+}
+
+# drive_run: Run the drive command, and return.
+# Returns the exit code, or undef on failure.
+sub drive_run {
+	my @drive_options = @_;
+
+	# Output some header stuff
+	dolog('Drive command: ' . join(' ', @drive_options) . "\n");
+	dolog("Drive command output:\n");
+	dolog("==========================================================\n");
+
+	# Actually spawn the command
+	my $input_handle;
+	my $output_handle = gensym();
+	my $drive_buffer = '';
+	my $drive_pid;
+	eval {
+		$drive_pid = open3($input_handle, $output_handle, 0,
+			           @drive_options);
+	};
+	if ($@) {
+		dolog(<<"EOF");
+There was a problem running the drive command.
+The error we got was: $@
+EOF
+		email_failure('Problem runnig the drive command', 'run',
+			      $RUNFOLDER, "$RealBin/email-recipients.txt",
+			      $LOGPATH, \$LOG, $RealBin, $RealScript);
+		return undef;
+	}
+	close($input_handle);
+
+	# Send any output to the log, and then clean up
+	while (read($output_handle, $drive_buffer, 10)) {
+		dolog($drive_buffer);
+		$drive_buffer = '';
+	}
+	waitpid($drive_pid, 0);
+	close($output_handle);
+
+	# Get and return the exit code
+	my $drive_exit_code = $? >> 8;
+	dolog("==========================================================\n");
+	dolog("The drive program returned exit code $drive_exit_code\n");
+	return $drive_exit_code;
 }
